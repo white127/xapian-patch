@@ -1,40 +1,23 @@
-Index: xapian-core/api/expanddecider.cc
-===================================================================
---- xapian-core/api/expanddecider.cc	(revision 17087)
-+++ xapian-core/api/expanddecider.cc	(working copy)
-@@ -45,4 +45,16 @@
-     return i == rejects.end();
- }
- 
-+bool    
-+ExpandDeciderFilterPrefix::operator()(const string &term) const
-+{
-+    /* Filter is invalid when prefix parameter is a empty string, it means this
-+     * filetr will do nothing. */
-+    if (length <= 0) {
-+        return true;
-+    } 
-+    string p = term.substr(0, length);
-+    return p != prefix;    
- }
-+
-+}
 Index: xapian-core/include/xapian/expanddecider.h
 ===================================================================
---- xapian-core/include/xapian/expanddecider.h	(revision 17087)
+--- xapian-core/include/xapian/expanddecider.h	(revision 17103)
 +++ xapian-core/include/xapian/expanddecider.h	(working copy)
-@@ -96,6 +96,24 @@
+@@ -96,6 +96,28 @@
      virtual bool operator()(const std::string &term) const;
  };
  
++/** ExpandDecider subclass which restrict terms to a particular prefix
++ *
++ *  ExpandDeciderFilterPrefix provides an easy way to choose terms with a  
++ *  particular prefix when generating an ESet.
++ */
 +class XAPIAN_VISIBILITY_DEFAULT ExpandDeciderFilterPrefix : public ExpandDecider {
 +    std::string prefix;
 +    unsigned length;
 +
 +  public:
-+    /** The parameter specify the prefix of terms to be rejected
-+     *  @param prefix_    Prefix of the term to reject. empty string means
-+     *                    do nothing
++    /** The parameter specify the prefix of terms to be retained
++     *  @param prefix_   restrict terms to the particular prefix_ 
 +     */
 +    ExpandDeciderFilterPrefix(const std::string &prefix_)
 +	: prefix(prefix_) 
@@ -48,3 +31,19 @@ Index: xapian-core/include/xapian/expanddecider.h
  }
  
  #endif // XAPIAN_INCLUDED_EXPANDDECIDER_H
+Index: xapian-core/api/expanddecider.cc
+===================================================================
+--- xapian-core/api/expanddecider.cc	(revision 17103)
++++ xapian-core/api/expanddecider.cc	(working copy)
+@@ -45,4 +45,11 @@
+     return i == rejects.end();
+ }
+ 
++bool    
++ExpandDeciderFilterPrefix::operator()(const string &term) const
++{
++    string p = term.substr(0, length);
++    return p != prefix;    
+ }
++
++}
