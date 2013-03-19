@@ -1,0 +1,159 @@
+diff --git a/xapian-bindings/xapian-headers.i b/xapian-bindings/xapian-headers.i
+index 85ec281..c0ee37a 100644
+--- a/xapian-bindings/xapian-headers.i
++++ b/xapian-bindings/xapian-headers.i
+@@ -316,6 +316,7 @@ SUBCLASSABLE(Xapian, ExpandDecider)
+  * array of strings (or whatever the equivalent is in the target language).
+  */
+ %ignore Xapian::ExpandDeciderFilterTerms;
++%ignore Xapian::ExpandDeciderFilterPrefix;
+ %include <xapian/expanddecider.h>
+ 
+ SUBCLASSABLE(Xapian, KeyMaker)
+diff --git a/xapian-core/api/expanddecider.cc b/xapian-core/api/expanddecider.cc
+index 35ac754..a8adc26 100644
+--- a/xapian-core/api/expanddecider.cc
++++ b/xapian-core/api/expanddecider.cc
+@@ -21,6 +21,7 @@
+ #include <config.h>
+ 
+ #include <xapian/expanddecider.h>
++#include "stringutils.h"
+ 
+ using namespace std;
+ 
+@@ -45,4 +46,10 @@ ExpandDeciderFilterTerms::operator()(const string &term) const
+     return i == rejects.end();
+ }
+ 
++bool    
++ExpandDeciderFilterPrefix::operator()(const string &term) const
++{
++    return startswith(term, prefix);
++}
++
+ }
+diff --git a/xapian-core/include/xapian/expanddecider.h b/xapian-core/include/xapian/expanddecider.h
+index d2d0a19..2ba93f7 100644
+--- a/xapian-core/include/xapian/expanddecider.h
++++ b/xapian-core/include/xapian/expanddecider.h
+@@ -96,6 +96,24 @@ class XAPIAN_VISIBILITY_DEFAULT ExpandDeciderFilterTerms : public ExpandDecider
+     virtual bool operator()(const std::string &term) const;
+ };
+ 
++/** ExpandDecider subclass which restrict terms to a particular prefix
++ *
++ *  ExpandDeciderFilterPrefix provides an easy way to choose terms with a  
++ *  particular prefix when generating an ESet.
++ */
++class XAPIAN_VISIBILITY_DEFAULT ExpandDeciderFilterPrefix : public ExpandDecider {
++    std::string prefix;
++
++  public:
++    /** The parameter specify the prefix of terms to be retained
++     *  @param prefix_   restrict terms to the particular prefix_ 
++     */
++    ExpandDeciderFilterPrefix(const std::string &prefix_)
++	: prefix(prefix_) { }   
++
++    virtual bool operator() (const std::string &term) const;
++};
++
+ }
+ 
+ #endif // XAPIAN_INCLUDED_EXPANDDECIDER_H
+diff --git a/xapian-core/tests/api_anydb.cc b/xapian-core/tests/api_anydb.cc
+index 3e09e13..a93e4c0 100644
+--- a/xapian-core/tests/api_anydb.cc
++++ b/xapian-core/tests/api_anydb.cc
+@@ -639,6 +639,57 @@ DEFINE_TESTCASE(expandfunctor1, backend) {
+     return true;
+ }
+ 
++DEFINE_TESTCASE(expanddeciderfilterprefix2, backend) {
++    Xapian::Enquire enquire(get_database("apitest_simpledata"));
++    enquire.set_query(Xapian::Query("this"));
++
++    Xapian::MSet mymset = enquire.get_mset(0, 10);
++    TEST(mymset.size() >= 2);
++
++    Xapian::RSet myrset;
++    Xapian::MSetIterator i = mymset.begin();
++    myrset.add_document(*i);
++    myrset.add_document(*(++i));
++
++    Xapian::ESet myeset_orig = enquire.get_eset(1000, myrset);
++    unsigned int neweset_size = 0;
++
++    //choose the first char in the first term as prefix 
++    Xapian::ESetIterator j = myeset_orig.begin();
++    TEST(myeset_orig.size() >= 1);
++    string prefix = (*j).substr(0, 1);
++    Xapian::ExpandDeciderFilterPrefix myfunctor(prefix);
++
++    for ( ; j != myeset_orig.end(); ++j) {
++        if (myfunctor(*j)) neweset_size++;
++    }
++    Xapian::ESet myeset = enquire.get_eset(neweset_size, myrset, &myfunctor);
++
++    Xapian::ESetIterator orig = myeset_orig.begin();
++    Xapian::ESetIterator filt = myeset.begin();
++    for (; orig != myeset_orig.end() && filt != myeset.end(); ++orig, ++filt) {
++	// skip over items that shouldn't be in myeset
++	while (orig != myeset_orig.end() && !myfunctor(*orig)) {
++	    ++orig;
++	}
++
++	TEST_AND_EXPLAIN(*orig == *filt &&
++			 orig.get_weight() == filt.get_weight(),
++			 "Mismatch in items " << *orig << " vs. " << *filt
++			 << " after filtering");
++    }
++
++    while (orig != myeset_orig.end() && !myfunctor(*orig)) {
++	++orig;
++    }
++
++    TEST_EQUAL(orig, myeset_orig.end());
++    TEST_AND_EXPLAIN(filt == myeset.end(),
++		     "Extra items in the filtered eset.");
++
++    return true;
++}
++
+ // tests the percent cutoff option
+ DEFINE_TESTCASE(pctcutoff1, backend) {
+     Xapian::Enquire enquire(get_database("apitest_simpledata"));
+diff --git a/xapian-core/tests/api_nodb.cc b/xapian-core/tests/api_nodb.cc
+index d3f35ba..4a20630 100644
+--- a/xapian-core/tests/api_nodb.cc
++++ b/xapian-core/tests/api_nodb.cc
+@@ -433,3 +433,28 @@ DEFINE_TESTCASE(emptymset1, !backend) {
+ 		   emptymset.get_termfreq("foo"));
+     return true;
+ }
++
++DEFINE_TESTCASE(expanddeciderfilterprefix1, !backend) {
++    vector<string> myvec_orig;
++    myvec_orig.push_back("one");
++    myvec_orig.push_back("two");
++    myvec_orig.push_back("t");
++    myvec_orig.push_back("");
++    myvec_orig.push_back("Two");
++    myvec_orig.push_back("twitter");
++
++    string prefix = "tw";
++    vector<string> myvec;
++    Xapian::ExpandDeciderFilterPrefix decider(prefix);
++    vector<string>::iterator it = myvec_orig.begin();
++    for (; it != myvec_orig.end(); ++it) {
++        if (decider(*it)) myvec.push_back(*it);
++    }
++
++    TEST_EQUAL(myvec.size(), 2);
++    TEST_EQUAL(myvec[0], "two");
++    TEST_EQUAL(myvec[1], "twitter");
++
++    return true;
++}
++
