@@ -1,0 +1,4833 @@
+diff --git a/xapian-bindings/java/Makefile.am b/xapian-bindings/java/Makefile.am
+index 5ed5625..0553a1a 100644
+--- a/xapian-bindings/java/Makefile.am
++++ b/xapian-bindings/java/Makefile.am
+@@ -36,6 +36,7 @@ XAPIAN_SWIG_JAVA_SRCS=\
+ 	org/xapian/ExpandDeciderAnd.java\
+ 	org/xapian/ExpandDeciderFilterPrefix.java\
+ 	org/xapian/FieldProcessor.java\
++	org/xapian/LuceneFieldProcessor.java\
+ 	org/xapian/FixedWeightPostingSource.java\
+ 	org/xapian/GreatCircleMetric.java\
+ 	org/xapian/InMemory.java\
+@@ -65,6 +66,7 @@ XAPIAN_SWIG_JAVA_SRCS=\
+ 	org/xapian/StemImplementation.java\
+ 	org/xapian/Stopper.java\
+ 	org/xapian/StringValueRangeProcessor.java\
++	org/xapian/SWIGTYPE_p_std__setT_std__string_t.java\
+ 	org/xapian/SWIGTYPE_p_std__string.java\
+ 	org/xapian/TermGenerator.java\
+ 	org/xapian/TermIterator.java\
+diff --git a/xapian-core/api/Makefile.mk b/xapian-core/api/Makefile.mk
+index 9006644..0c96c50 100644
+--- a/xapian-core/api/Makefile.mk
++++ b/xapian-core/api/Makefile.mk
+@@ -47,4 +47,5 @@ lib_src +=\
+ 	api/valuerangeproc.cc\
+ 	api/valuesetmatchdecider.cc\
+ 	api/vectortermlist.cc\
+-	api/version.cc
++	api/version.cc\
++	api/lucenefieldproc.cc
+diff --git a/xapian-core/api/lucenefieldproc.cc b/xapian-core/api/lucenefieldproc.cc
+new file mode 100644
+index 0000000..e15beee
+--- /dev/null
++++ b/xapian-core/api/lucenefieldproc.cc
+@@ -0,0 +1,19 @@
++
++#include <xapian/queryparser.h>
++#include "config.h"
++#include "debuglog.h"
++
++#include <string>
++
++using namespace std;
++
++namespace Xapian {
++
++Xapian::Query
++LuceneFieldProcessor::operator()(const string & str) {
++    LOGCALL(API, Xapian::Query, "LuceneFieldProcessor::operator", str);
++
++    return Xapian::Query(prefix + ":" + str);
++}
++
++}
+diff --git a/xapian-core/api/omdatabase.cc b/xapian-core/api/omdatabase.cc
+index c80d838..c2b6763 100644
+--- a/xapian-core/api/omdatabase.cc
++++ b/xapian-core/api/omdatabase.cc
+@@ -740,6 +740,19 @@ Database::get_uuid() const
+     RETURN(uuid);
+ }
+ 
++//For Lucene
++void
++Database::get_fieldinfo(set<string> & field_set) const
++{
++    LOGCALL(API, void, "Database::get_fieldinfo", field_set.size());
++
++    for (size_t i = 0; i < internal.size(); ++i) {
++        internal[i]->get_fieldinfo(field_set);
++    }
++
++    return ;
++}
++
+ ///////////////////////////////////////////////////////////////////////////
+ 
+ WritableDatabase::WritableDatabase() : Database()
+diff --git a/xapian-core/api/omdocument.cc b/xapian-core/api/omdocument.cc
+index 41d7e72..fde8483 100644
+--- a/xapian-core/api/omdocument.cc
++++ b/xapian-core/api/omdocument.cc
+@@ -37,6 +37,8 @@
+ 
+ #include <algorithm>
+ #include <string>
++#include "debuglog.h"
++#include <iostream>
+ 
+ using namespace std;
+ 
+@@ -46,6 +48,7 @@ namespace Xapian {
+ 
+ Document::Document(Document::Internal *internal_) : internal(internal_)
+ {
++    LOGLINE(DB, "Document::Document, doc = " << (int)internal_);
+ }
+ 
+ Document::Document() : internal(new Xapian::Document::Internal)
+@@ -213,6 +216,41 @@ Document::unserialise(const std::string &s)
+     return unserialise_document(s);
+ }
+ 
++std::string
++Document::get_data_string(const std::string & field) {
++    LOGCALL(API, std::string, "Just for Lucene, Document::get_data_string", field);
++
++    RETURN(internal->get_data_string(field));
++}
++
++int
++Document::get_data_int(const std::string & field) {
++    LOGCALL(API, int, "Just for Lucene, Document::get_data_int", field);
++
++    RETURN(internal->get_data_int(field));
++}
++
++long
++Document::get_data_long(const std::string & field) {
++    LOGCALL(API, long, "Just for Lucene, Document::get_data_long", field);
++
++    RETURN(internal->get_data_long(field));
++}
++
++float
++Document::get_data_float(const std::string & field) {
++    LOGCALL(API, float, "Just for Lucene, Document::get_data_float", field);
++
++    RETURN(internal->get_data_float(field));
++}
++
++double
++Document::get_data_double(const std::string & field) {
++    LOGCALL(API, double, "Just for Lucene, Document::get_data_float", field);
++
++    RETURN(internal->get_data_double(field));
++}
++
+ }
+ 
+ /////////////////////////////////////////////////////////////////////////////
+@@ -285,8 +323,17 @@ Xapian::Document::Internal::get_value(Xapian::valueno slot) const
+ string
+ Xapian::Document::Internal::get_data() const
+ {
+-    if (data_here) return data;
+-    if (!database.get()) return string();
++    cout << "Xapian::Document::internal::get_data" << endl; 
++    if (data_here) {
++        cout << "Xapian::Document::internal::get_data, data_here" <<
++            data_here << endl;
++        return data;
++    }
++    if (!database.get()) {
++        cout << "Xapian::Document::internal::get_data, database.get()" <<
++            database.get() << endl;
++        return string();
++    }
+     return do_get_data();
+ }
+ 
+@@ -504,3 +551,49 @@ Xapian::Document::Internal::~Internal()
+     if (database.get())
+ 	database->invalidate_doc_object(this);
+ }
++
++//Below is just for Lucene
++std::string
++Xapian::Document::Internal::get_data_string(const std::string & field) {
++    LOGCALL(DB, std::string, "Document::Internal::get_data_string, just for Lucene", field);
++
++    Assert(false);
++
++    RETURN("");
++}
++
++int
++Xapian::Document::Internal::get_data_int(const std::string & field) {
++    LOGCALL(DB, int, "Document::Internal::get_data_int, just for Lucene", field);
++
++    Assert(false);
++
++    RETURN(0);
++}
++
++long
++Xapian::Document::Internal::get_data_long(const std::string & field) {
++    LOGCALL(DB, long, "Document::Internal::get_data_long, just for Lucene", field);
++
++    Assert(false);
++
++    RETURN(0.0);
++}
++
++float
++Xapian::Document::Internal::get_data_float(const std::string & field) {
++    LOGCALL(DB, float, "Document::Internal::get_data_float, just for Lucene", field);
++
++    Assert(false);
++
++    RETURN(0.0);
++}
++
++double
++Xapian::Document::Internal::get_data_double(const std::string & field) {
++    LOGCALL(DB, double, "Document::Internal::get_data_double, just for Lucene", field);
++
++    Assert(false);
++
++    RETURN(0.0);
++}
+diff --git a/xapian-core/api/omenquire.cc b/xapian-core/api/omenquire.cc
+index 6e1f762..381d798 100644
+--- a/xapian-core/api/omenquire.cc
++++ b/xapian-core/api/omenquire.cc
+@@ -49,6 +49,7 @@
+ #include <cfloat>
+ #include <cmath>
+ #include <vector>
++#include <iostream>
+ 
+ using namespace std;
+ 
+@@ -386,11 +387,12 @@ MSet::Internal::convert_to_percent_internal(double wt) const
+ Document
+ MSet::Internal::get_doc_by_index(Xapian::doccount index) const
+ {
+-    LOGCALL(MATCH, Document, "Xapian::MSet::Internal::get_doc_by_index", index);
++    LOGCALL(MATCH, Document, "Xapian::MSet::Internal::get_doc_by_index", index | firstitem);
+     index += firstitem; 
+     map<Xapian::doccount, Document>::const_iterator doc;
+     doc = indexeddocs.find(index);
+     if (doc != indexeddocs.end()) {
++        cout << "Xapian::MSet::Internal::get_doc_by_index L394" << endl;
+ 	RETURN(doc->second);
+     }
+     if (index < firstitem || index >= firstitem + items.size()) {
+@@ -398,15 +400,18 @@ MSet::Internal::get_doc_by_index(Xapian::doccount index) const
+     }
+     Assert(enquire.get());
+     if (!requested_docs.empty()) {
++        cout << "Xapian::MSet::Internal::get_doc_by_index L403" << endl;
+ 	// There's already a pending request, so handle that.
+ 	read_docs();
+ 	// Maybe we just fetched the doc we want.
+ 	doc = indexeddocs.find(index);
+ 	if (doc != indexeddocs.end()) {
++        cout << "Xapian::MSet::Internal::get_doc_by_index L409" << endl;
+ 	    RETURN(doc->second);
+ 	}
+     }
+ 
++    cout << "Xapian::MSet::Internal::get_doc_by_index L414" << endl;
+     // Don't cache unless fetch() was called by the API user.
+     enquire->request_doc(items[index - firstitem]);
+     RETURN(enquire->read_doc(items[index - firstitem]));
+@@ -837,6 +842,7 @@ Enquire::Internal::get_description() const
+ void
+ Enquire::Internal::request_doc(const Xapian::Internal::MSetItem &item) const
+ {
++    LOGCALL_VOID(API, "Enquire::Internal::request_doc", item.did);
+     try {
+ 	unsigned int multiplier = db.internal.size();
+ 
+@@ -853,6 +859,7 @@ Enquire::Internal::request_doc(const Xapian::Internal::MSetItem &item) const
+ Document
+ Enquire::Internal::read_doc(const Xapian::Internal::MSetItem &item) const
+ {
++    LOGCALL(API, Document, "Enquire::Internal::read_doc", item.did);
+     try {
+ 	unsigned int multiplier = db.internal.size();
+ 
+@@ -860,7 +867,12 @@ Enquire::Internal::read_doc(const Xapian::Internal::MSetItem &item) const
+ 	Xapian::doccount dbnumber = (item.did - 1) % multiplier;
+ 
+ 	Xapian::Document::Internal *doc;
++    //TODO maybe I should changes this API, add segment index here
++    //so I can find the write segment fdtxtable to search document
++    //If so, class MsetItem also should be changed, add segment index
+ 	doc = db.internal[dbnumber]->collect_document(realdid);
++    LOGLINE(MATCH, "read_doc, realdid = " << realdid << ", dbnumber = " <<
++                dbnumber << ", doc = " << (int)doc);
+ 	return Document(doc);
+     } catch (Error & e) {
+ 	if (errorhandler) (*errorhandler)(e);
+diff --git a/xapian-core/api/query.cc b/xapian-core/api/query.cc
+index f2a2485..4bafed0 100644
+--- a/xapian-core/api/query.cc
++++ b/xapian-core/api/query.cc
+@@ -39,18 +39,28 @@ const Query Query::MatchAll((string()));
+ const Query Query::MatchNothing;
+ 
+ Query::Query(const string & term, Xapian::termcount wqf, Xapian::termpos pos)
+-    : internal(new Xapian::Internal::QueryTerm(term, wqf, pos)) { }
++    : internal(new Xapian::Internal::QueryTerm(term, wqf, pos))
++{
++    LOGCALL_CTOR(QUERYPARSER, "Query1", term | wqf | pos);
++}
+ 
+ Query::Query(Xapian::PostingSource * source)
+-    : internal(new Xapian::Internal::QueryPostingSource(source)) { }
++    : internal(new Xapian::Internal::QueryPostingSource(source))
++{
++    LOGCALL_CTOR(QUERYPARSER, "Query2", source);
++}
+ 
+ Query::Query(double factor, const Xapian::Query & subquery) {
++    LOGCALL_CTOR(QUERYPARSER, "Query3", factor | subquery);
++
+     if (!subquery.empty())
+ 	internal = new Xapian::Internal::QueryScaleWeight(factor, subquery);
+ }
+ 
+ Query::Query(op op_, const Xapian::Query & subquery, double factor)
+ {
++    LOGCALL_CTOR(QUERYPARSER, "Query4", op_ | subquery | factor);
++
+     if (rare(op_ != OP_SCALE_WEIGHT))
+ 	throw Xapian::InvalidArgumentError("op must be OP_SCALE_WEIGHT");
+     // If the subquery is MatchNothing then generate Query() which matches
+@@ -61,6 +71,8 @@ Query::Query(op op_, const Xapian::Query & subquery, double factor)
+ 
+ Query::Query(op op_, Xapian::valueno slot, const std::string & limit)
+ {
++    LOGCALL_CTOR(QUERYPARSER, "Query5", op_ | slot | limit);
++
+     if (op_ == OP_VALUE_GE) {
+ 	if (limit.empty())
+ 	    internal = MatchAll.internal;
+@@ -76,6 +88,8 @@ Query::Query(op op_, Xapian::valueno slot, const std::string & limit)
+ Query::Query(op op_, Xapian::valueno slot,
+ 	     const std::string & begin, const std::string & end)
+ {
++    LOGCALL_CTOR(QUERYPARSER, "Query6", op_ | slot | begin | end);
++
+     if (rare(op_ != OP_VALUE_RANGE))
+ 	throw Xapian::InvalidArgumentError("op must be OP_VALUE_RANGE");
+     // If begin > end then generate Query() which matches nothing.
+diff --git a/xapian-core/api/queryinternal.cc b/xapian-core/api/queryinternal.cc
+index ba3ff18..d7b300c 100644
+--- a/xapian-core/api/queryinternal.cc
++++ b/xapian-core/api/queryinternal.cc
+@@ -508,6 +508,7 @@ namespace Internal {
+ string
+ QueryTerm::get_description() const
+ {
++    LOGCALL(API, string, "QueryTerm::get_description()", NO_ARGS);
+     string desc = term;
+     if (term.empty())
+ 	desc = "<alldocuments>";
+diff --git a/xapian-core/api/queryinternal.h b/xapian-core/api/queryinternal.h
+index f01848e..4e92318 100644
+--- a/xapian-core/api/queryinternal.h
++++ b/xapian-core/api/queryinternal.h
+@@ -26,6 +26,9 @@
+ #include "xapian/intrusive_ptr.h"
+ #include "xapian/query.h"
+ 
++#include "config.h"
++#include "debuglog.h"
++
+ /// Default set_size for OP_ELITE_SET:
+ const Xapian::termcount DEFAULT_ELITE_SET_SIZE = 10;
+ 
+@@ -45,7 +48,11 @@ class QueryTerm : public Query::Internal {
+     QueryTerm(const std::string & term_,
+ 	      Xapian::termcount wqf_,
+ 	      Xapian::termpos pos_)
+-	: term(term_), wqf(wqf_), pos(pos_) { }
++	: term(term_), wqf(wqf_), pos(pos_)
++    {
++        LOGLINE(API, "QueryTerm::QueryTerm, term=" << term << ", wqf=" << wqf <<
++                    ", pos=" << pos);
++    }
+ 
+     PostingIterator::Internal * postlist(QueryOptimiser * qopt, double factor) const;
+ 
+diff --git a/xapian-core/backends/Makefile.mk b/xapian-core/backends/Makefile.mk
+index 8d96271..e318483 100644
+--- a/xapian-core/backends/Makefile.mk
++++ b/xapian-core/backends/Makefile.mk
+@@ -60,3 +60,4 @@ include backends/chert/Makefile.mk
+ include backends/inmemory/Makefile.mk
+ include backends/multi/Makefile.mk
+ include backends/remote/Makefile.mk
++include backends/lucene/Makefile.mk
+diff --git a/xapian-core/backends/chert/chert_postlist.cc b/xapian-core/backends/chert/chert_postlist.cc
+index 6816821..8b2cdd7 100644
+--- a/xapian-core/backends/chert/chert_postlist.cc
++++ b/xapian-core/backends/chert/chert_postlist.cc
+@@ -69,6 +69,8 @@ ChertPostListTable::get_doclength(Xapian::docid did,
+     }
+     if (!doclen_pl->jump_to(did))
+ 	throw Xapian::DocNotFoundError("Document " + str(did) + " not found");
++    LOGLINE(DB, "ChertPostListTable::get_doclength, did=" << did <<
++                "doclength=" << doclen_pl->get_wdf());
+     return doclen_pl->get_wdf();
+ }
+ 
+diff --git a/xapian-core/backends/database.cc b/xapian-core/backends/database.cc
+index 53dc6d74..39a6174 100644
+--- a/xapian-core/backends/database.cc
++++ b/xapian-core/backends/database.cc
+@@ -372,4 +372,14 @@ Database::Internal::as_remotedatabase()
+     return NULL;
+ }
+ 
++void
++Database::Internal::get_fieldinfo(set<string> & field_set) const {
++    //Did nothing here except for LuceneDatabase, LuceneDatabase
++    //will reload this function
++    field_set.size();
++
++    return ;
+ }
++
++}
++
+diff --git a/xapian-core/backends/database.h b/xapian-core/backends/database.h
+index 3d95921..8d13c76 100644
+--- a/xapian-core/backends/database.h
++++ b/xapian-core/backends/database.h
+@@ -26,6 +26,7 @@
+ #define OM_HGUARD_DATABASE_H
+ 
+ #include <string>
++#include <set>
+ 
+ #include "internaltypes.h"
+ 
+@@ -523,6 +524,12 @@ class Database::Internal : public Xapian::Internal::intrusive_base {
+ 	 *  database.
+ 	 */
+ 	virtual RemoteDatabase * as_remotedatabase();
++
++    /**
++     * For Lucene, get field name from LuceneDatabase
++     * In other db, there's no operation in this function
++     */
++    virtual void get_fieldinfo(set<string> & field_set) const;
+ };
+ 
+ }
+diff --git a/xapian-core/backends/dbfactory.cc b/xapian-core/backends/dbfactory.cc
+index ec4ea3b..e9eea8c 100644
+--- a/xapian-core/backends/dbfactory.cc
++++ b/xapian-core/backends/dbfactory.cc
+@@ -45,6 +45,9 @@
+ #ifdef XAPIAN_HAS_INMEMORY_BACKEND
+ # include "inmemory/inmemory_database.h"
+ #endif
++#ifdef XAPIAN_HAS_LUCENE_BACKEND
++# include "lucene/lucene_database.h"
++#endif
+ // Even if none of the above get included, we still need a definition of
+ // Database::Internal.
+ #include "backends/database.h"
+@@ -356,6 +359,17 @@ Database::Database(const string &path)
+     }
+ #endif
+ 
++#ifdef XAPIAN_HAS_LUCENE_BACKEND
++    //another strategy, split LuceneDatabase to multi segdb, treat on 
++    //segdb as a single Database
++    LOGLINE(DB, "---------open Lucene db path:" << path);
++    //TODO is it suitable for detect Lucene using segments.gen?
++    if (file_exists(path + "/segments.gen")) {
++        internal.push_back(new LuceneDatabase(path));
++        return;
++    }
++#endif
++
+     // Check for "stub directories".
+     string stub_file = path;
+     stub_file += "/XAPIANDB";
+@@ -366,6 +380,7 @@ Database::Database(const string &path)
+ 
+ 	throw DatabaseOpeningError("Couldn't detect type of database");
+     }
++    LOGLINE(DB, "---------stub_file:" << stub_file);
+ 
+     open_stub(*this, stub_file);
+ }
+diff --git a/xapian-core/backends/document.h b/xapian-core/backends/document.h
+index 135c6e8..ed28646 100644
+--- a/xapian-core/backends/document.h
++++ b/xapian-core/backends/document.h
+@@ -31,6 +31,7 @@
+ #include "api/documentterm.h"
+ #include <map>
+ #include <string>
++#include <iostream>
+ 
+ using namespace std;
+ 
+@@ -85,7 +86,10 @@ class Xapian::Document::Internal : public Xapian::Internal::intrusive_base {
+ 	virtual void do_get_all_values(map<Xapian::valueno, string> & values_) const {
+ 	    values_.clear();
+ 	}
+-	virtual string do_get_data() const { return string(); }
++	virtual string do_get_data() const { 
++        cout << "Document::do_get_data()" << endl;
++        return string();
++    }
+ 
+     public:
+ 	/** Get value by value number.
+@@ -220,6 +224,19 @@ class Xapian::Document::Internal : public Xapian::Internal::intrusive_base {
+ 	 *  still exist at the time this is called.
+ 	 */
+ 	virtual ~Internal();
++
++    /**
++     * Below is just for Lucene
++     */
++    virtual std::string get_data_string(const std::string & field);
++
++    virtual int get_data_int(const std::string & field);
++
++    virtual long get_data_long(const std::string & field);
++
++    virtual float get_data_float(const std::string & field);
++
++    virtual double get_data_double(const std::string & field);
+ };
+ 
+ #endif  // OM_HGUARD_DOCUMENT_H
+diff --git a/xapian-core/backends/lucene/Makefile b/xapian-core/backends/lucene/Makefile
+new file mode 100644
+index 0000000..062b8f5
+--- /dev/null
++++ b/xapian-core/backends/lucene/Makefile
+@@ -0,0 +1,9 @@
++# Makefile for use in directories built by non-recursive make.
++
++SHELL = /bin/sh
++
++all check check-syntax:
++	cd ../.. && $(MAKE) $@
++
++clean:
++	rm -f *.o *.obj *.lo
+diff --git a/xapian-core/backends/lucene/Makefile.mk b/xapian-core/backends/lucene/Makefile.mk
+new file mode 100644
+index 0000000..eef73d4
+--- /dev/null
++++ b/xapian-core/backends/lucene/Makefile.mk
+@@ -0,0 +1,36 @@
++EXTRA_DIST +=\
++	backends/lucene/dir_contents\
++	backends/lucene/Makefile
++
++if BUILD_BACKEND_LUCENE
++noinst_HEADERS +=\
++	backends/lucene/lucene_database.h\
++	backends/lucene/bytestream.h\
++	backends/lucene/lucene_segmentgentable.h\
++	backends/lucene/lucene_segmenttable.h\
++	backends/lucene/lucene_tiitable.h\
++	backends/lucene/lucene_term.h\
++	backends/lucene/lucene_termindex.h\
++	backends/lucene/lucene_fnmtable.h\
++	backends/lucene/lucene_tistable.h\
++	backends/lucene/lucene_frqtable.h\
++	backends/lucene/lucene_fdtxtable.h\
++	backends/lucene/lucene_segdb.h\
++	backends/lucene/lucene_document.h
++
++lib_src +=\
++	backends/lucene/lucene_database.cc\
++	backends/lucene/bytestream.cc\
++	backends/lucene/lucene_segmentgentable.cc\
++	backends/lucene/lucene_segmenttable.cc\
++	backends/lucene/lucene_tiitable.cc\
++	backends/lucene/lucene_term.cc\
++	backends/lucene/lucene_termindex.cc\
++	backends/lucene/lucene_fnmtable.cc\
++	backends/lucene/lucene_tistable.cc\
++	backends/lucene/lucene_frqtable.cc\
++	backends/lucene/lucene_fdtxtable.cc\
++	backends/lucene/lucene_segdb.cc\
++	backends/lucene/lucene_document.cc
++
++endif
+diff --git a/xapian-core/backends/lucene/bytestream.cc b/xapian-core/backends/lucene/bytestream.cc
+new file mode 100644
+index 0000000..7b6f6da
+--- /dev/null
++++ b/xapian-core/backends/lucene/bytestream.cc
+@@ -0,0 +1,465 @@
++
++#include <cstdio>
++#include <xapian/error.h>
++#include <config.h>
++#include <iostream>
++#include <cstdio>
++#include <cassert>
++
++#include "config.h"
++#include "safeerrno.h"
++#include "safefcntl.h"
++#include "debuglog.h"
++#include "filetests.h"
++
++#include "bytestream.h"
++
++ByteStreamReader::ByteStreamReader(const string & db_dir_)
++{
++    db_dir = db_dir_;
++    file_name = "";
++    handle = NULL;
++}
++
++ByteStreamReader::ByteStreamReader(const string & db_dir_, const string & file_name_) {
++    LOGCALL_CTOR(API, "ByteStreamReader", db_dir_ | file_name);
++    
++    db_dir = db_dir_;
++    file_name = file_name_;
++    string file_path = db_dir + "/" + file_name;
++
++    if (!file_exists(file_path.c_str())) {
++        string message("Couldn't find ");
++        message += file_path;
++        message += " DB to read: ";
++        message += strerror(errno);
++        throw Xapian::DatabaseOpeningError(message);
++    }
++
++    handle = fopen(file_path.c_str(), "rb");
++    if (handle < 0) {
++        string message("Couldn't open ");
++        message += file_path;
++        message += " DB to read: ";
++        message += strerror(errno);
++        throw Xapian::DatabaseOpeningError(message);
++    }
++}
++
++bool
++ByteStreamReader::set_filename(const string & file_name_) {
++    file_name = file_name_;
++
++    return true;
++}
++
++bool
++ByteStreamReader::open_stream() {
++    LOGCALL(API, bool, "ByteStreamReader::open_stream", NO_ARGS);
++
++    //opened befor, just return
++    if (NULL != handle) {
++        LOGLINE(API, "ByteStreamReader::open_stream, opened already");
++        return true;
++    }
++
++    if ("" == db_dir || "" == file_name) {
++        string message("db_dir or file_name not initialed");
++        throw Xapian::DatabaseOpeningError(message);
++    }
++
++    string file_path = db_dir + "/" + file_name;
++    LOGLINE(API, "ByteStreamReader::open_stream, file_path=" << file_path);
++
++    if (!file_exists(file_path.c_str())) {
++        string message("Couldn't find ");
++        message += file_path;
++        message += " DB to read: ";
++        message += strerror(errno);
++        throw Xapian::DatabaseOpeningError(message);
++    }
++
++    handle = fopen(file_path.c_str(), "rb");
++    if (handle < 0) {
++        string message("Couldn't open ");
++        message += file_path;
++        message += " DB to read: ";
++        message += strerror(errno);
++        throw Xapian::DatabaseOpeningError(message);
++    }
++
++    return true;
++}
++
++ByteStreamReader::~ByteStreamReader() {
++    //TODO core dump here, ignore
++    /*
++    if (NULL != handle) {
++        fclose(handle);
++    }
++    */
++}
++
++char
++ByteStreamReader::ByteStreamReader::read_byte() const {
++    assert(NULL != handle);
++
++    unsigned char result;
++    ssize_t c = fread(&result, sizeof(char), 1, handle);
++    if (c <= 0) {
++        if (0 == c) {
++            throw Xapian::DatabaseError("Couldn't read enought(EOF)");
++        }
++        throw Xapian::DatabaseError("Error reading from file", errno);
++    }
++
++    return result;
++}
++
++bool
++ByteStreamReader::ByteStreamReader::read_byte(char & data) const {
++    assert(NULL != handle);
++
++    ssize_t c = fread(&data, sizeof(char), 1, handle);
++    if (c <= 0) {
++        if (0 == c) {
++            throw Xapian::DatabaseError("Couldn't read enought(EOF)");
++        }
++        throw Xapian::DatabaseError("Error reading from file", errno);
++    }
++
++    return true;
++}
++
++int
++ByteStreamReader::read_int32() const {
++    assert(NULL != handle);
++
++    int result;
++    ssize_t c = fread(&result, sizeof(int), 1, handle);
++    if (c <= 0) {
++        if (0 == c) {
++            throw Xapian::DatabaseError("Couldn't read enought(EOF)");
++        }
++        throw Xapian::DatabaseError("Error reading from file", errno);
++    }
++
++    //little/big ending transfer
++
++    return reverse_order_int32(result);
++}
++
++bool
++ByteStreamReader::read_int32(int & data) const {
++    assert(NULL != handle);
++
++    ssize_t c = fread(&data, sizeof(int), 1, handle);
++    if (c <= 0) {
++        if (0 == c) {
++            throw Xapian::DatabaseError("Couldn't read enought(EOF)");
++        }
++        throw Xapian::DatabaseError("Error reading from file", errno);
++    }
++
++    data = reverse_order_int32(data);
++
++    return true;
++}
++
++bool
++ByteStreamReader::read_uint32(unsigned int & data) const {
++    assert(NULL != handle);
++
++    ssize_t c = fread(&data, sizeof(unsigned int), 1, handle);
++    if (c <= 0) {
++        if (0 == c) {
++            throw Xapian::DatabaseError("Couldn't read enought(EOF)");
++        }
++        throw Xapian::DatabaseError("Error reading from file", errno);
++    }
++
++    data = reverse_order_int32(data);
++
++    return true;
++}
++
++
++long long
++ByteStreamReader::read_int64() const {
++    assert(NULL != handle);
++
++    long long result;
++    ssize_t c = fread(&result, sizeof(long long), 1, handle);
++    if (c <= 0) {
++        if (0 == c) {
++            throw Xapian::DatabaseError("Couldn't read enought(EOF)");
++        }
++        throw Xapian::DatabaseError("Error reading from file", errno);
++    }
++
++    return reverse_order_int64(result);
++}
++
++bool
++ByteStreamReader::read_int64(long long & data) const {
++    assert(NULL != handle);
++
++    ssize_t c = fread(&data, sizeof(long long), 1, handle);
++    if (c <= 0) {
++        if (0 == c) {
++            throw Xapian::DatabaseError("Couldn't read enought(EOF)");
++        }
++        throw Xapian::DatabaseError("Error reading from file", errno);
++    }
++
++    data = reverse_order_int64(data);
++
++    return true;
++}
++
++bool
++ByteStreamReader::read_uint64(unsigned long long & data) const {
++    assert(NULL != handle);
++    
++    ssize_t c = fread(&data, sizeof(unsigned long long), 1, handle);
++    if (c <= 0) {
++        if (0 == c) {
++            throw Xapian::DatabaseError("Couldn't read enought(EOF)");
++        }
++        throw Xapian::DatabaseError("Error reading from file", errno);
++    }
++
++    LOGLINE(API, "ByteStreamReader::read_uint64, data" << data);
++
++    data = reverse_order_int64(data);
++
++    return true;
++}
++
++int
++ByteStreamReader::read_vint32() const {
++    assert(NULL != handle);
++
++    unsigned char b = read_byte();
++    int i = b & 0x7f;
++    if ((b & 0x80) == 0) return i;
++    b = read_byte();
++    i |= ((b & 0x7f) << 7);
++    if ((b & 0x80) == 0) return i;
++    b = read_byte();
++    i |= ((b & 0x7f) << 14);
++    if ((b & 0x80) == 0) return i;
++    b = read_byte();
++    i |= ((b & 0x7f) << 21);
++    if ((b & 0x80) == 0) return i;
++    b = read_byte();
++    i |= ((b & 0x7f) << 28);
++    if ((b & 0x80) == 0) return i;
++
++    throw Xapian::DatabaseError("Invalid vInt detected(too many bytes)");
++}
++
++void
++ByteStreamReader::read_vint32(int & data) const {
++    assert(NULL != handle);
++
++    unsigned char b = read_byte();
++    data = b & 0x7f;
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7f) << 7);
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7f) << 14);
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7f) << 21);
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7f) << 28);
++    if ((b & 0x80) == 0) return ;
++
++    throw Xapian::DatabaseError("Invalid vInt detected(too many bytes)");
++}
++
++void
++ByteStreamReader::read_vint64(long long & data) const {
++    assert(NULL != handle);
++
++    long long b = (long long)read_byte();
++    data = b & 0x7fL;
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7fL) << 7);
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7fL) << 14);
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7fL) << 21);
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7fL) << 28);
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7fL) << 35);
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7fL) << 42);
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7fL) << 49);
++    if ((b & 0x80) == 0) return ;
++    b = read_byte();
++    data |= ((b & 0x7fL) << 56);
++    if ((b & 0x80) == 0) return ;
++
++    throw Xapian::DatabaseError("Invalid vLong detected(too many bytes)");
++}
++
++//TODO declare string in local function, it causes string copy when return
++string
++ByteStreamReader::read_string() const {
++    assert(NULL != handle);
++
++    int len = read_vint32();
++    //Is there a better method to read string without new/delete?
++    if (0 == len)
++        return "";
++    char * buf = new char[len + 1];
++    memset(buf, 0, len + 1);
++    ssize_t c = fread(buf, sizeof(char), len, handle);
++    if (c < len) {
++        if (0 == c) {
++            throw Xapian::DatabaseError("Couldn't read enought(EOF)");
++        }
++        throw Xapian::DatabaseError("Error reading from file", errno);
++    }
++
++    string result(buf, len);
++    delete buf;
++
++    return result;
++}
++
++//read string in reference, avoid copy return
++bool
++ByteStreamReader::read_string(string & str) const {
++    assert(NULL != handle);
++
++    int len = read_vint32();
++    //cout << "ByteStreamReader::read_string, len:" << len << endl;
++    //Is there a better method to read string without new/delete?
++    if (0 == len) {
++        str = "";
++        return true;
++    }
++
++    char * buf = new char[len + 1];
++    memset(buf, 0, len + 1);
++    ssize_t c = fread(buf, sizeof(char), len, handle);
++    if (c < len) {
++        if (0 == c) {
++            throw Xapian::DatabaseError("Couldn't read enought(EOF)");
++        }
++        throw Xapian::DatabaseError("Error reading from file", errno);
++    }
++
++    str.assign(buf, len);
++    delete buf;
++
++    return true;
++}
++
++
++
++//TODO it causes map copy when return, so change it to reference
++bool
++ByteStreamReader::read_ssmap(map<string, string> &ssmap) const {
++    assert(NULL != handle);
++
++    int count = read_int32();
++    for (int i = 0; i < count; ++i) {
++        string k = read_string();
++        string v = read_string();
++        ssmap.insert(pair<string, string>(k, v));
++    }
++
++    return true;
++}
++
++bool
++ByteStreamReader::read_term(LuceneTerm & term) const {
++    assert(NULL != handle);
++
++    read_vint32(term.prefix_length);
++    read_string(term.suffix);
++    read_vint32(term.field_num);
++    /*
++    cout << "prefix_length:" << term.prefix_length << " suffix:" << term.suffix <<
++        " field_num:" << term.field_num << endl;
++        */
++
++    return true;
++}
++
++bool
++ByteStreamReader::read_terminfo(LuceneTermInfo & terminfo,
++            const unsigned int & skip_interval) const {
++    assert(NULL != handle);
++
++    read_term(terminfo.term);
++    read_vint32(terminfo.doc_freq);
++    //from lucene.3.6.2->TermInfoReaderIndex.java line126, but it's read sequence is:
++    //doc_freq,skip_delta,freq_delta,prox_delta, diff from here
++    read_vint32(terminfo.freq_delta);
++    read_vint32(terminfo.prox_delta);
++    if ((unsigned int)terminfo.doc_freq >= skip_interval) {
++        read_vint32(terminfo.skip_delta);
++    } else {
++        terminfo.skip_delta = 0;
++    }
++    /*
++    cout << "doc_freq:" << terminfo.doc_freq << " freq_delta:" <<
++        terminfo.freq_delta << " prox_delta:" << terminfo.prox_delta <<
++        " skip_delta:" << terminfo.skip_delta << endl;
++        */
++
++    return true;
++}
++
++bool
++ByteStreamReader::read_did_and_freq(int & docid, int & freq) const {
++    int did = 0;
++    read_vint32(did);
++    docid = did >> 1;
++    int has_freq = did & 0x00000001;
++    if (1 == has_freq) {
++      freq = 1;
++    }
++    else {
++        read_vint32(freq);
++    }
++
++    return true;
++}
++
++void
++ByteStreamReader::seek_to(long position) const {
++    assert(NULL != handle);
++
++    int r = fseek(handle, position, SEEK_SET);
++    if (r < 0) {
++        throw Xapian::DatabaseError("Couldn't fseek the right posion in file");
++    }
++
++    return ;
++}
++
++/**
++ * below is just for debug
++ */
++long
++ByteStreamReader::get_ftell() const {
++    return ftell(handle);
++}
+diff --git a/xapian-core/backends/lucene/bytestream.h b/xapian-core/backends/lucene/bytestream.h
+new file mode 100644
+index 0000000..ca6466f
+--- /dev/null
++++ b/xapian-core/backends/lucene/bytestream.h
+@@ -0,0 +1,133 @@
++
++#ifndef XAPIAN_INCLUDED_BYTESTREAM_H
++#define XAPIAN_INCLUDED_BYTESTREAM_H
++
++#include "xapian.h"
++
++#include "lucene_term.h"
++
++#include <string>
++#include <string.h>
++#include <map>
++
++using namespace std;
++
++class ByteStreamReader {
++    /* Database directory */
++    string db_dir;
++
++    /* File name for reading */
++    string file_name;
++
++    /* File Handler */
++    FILE * handle;
++
++  public:
++    ByteStreamReader(const string & db_dir_);
++    ByteStreamReader(const string & db_dir_, const string & file_name_);
++
++    ~ByteStreamReader();
++
++    bool set_filename(const string & file_name);
++
++    /* Open file for reading */
++    bool open_stream();
++
++    /* Built-in type, using reference is more efficient? Maybe they have 
++     * no obvious difference */
++
++    /* Read one Byte */
++    char read_byte() const;
++    bool read_byte(char &) const;
++
++    /* Read 4 Bytes */
++    int read_int32() const;
++    bool read_int32(int &) const;
++    bool read_uint32(unsigned int &) const;
++
++    //TODO how to express int64 
++    /**
++     * Using long long for int64, just available in linux i386, is it works
++     * on other platform?
++     **/
++    long long read_int64() const;
++    bool read_int64(long long &) const;
++    bool read_uint64(unsigned long long &) const;
++
++    /**
++     * Prefix 'v' means it's variable-length.
++     * Details about VInt, see http://lucene.apache.org/core/3_6_2/fileformats.html
++     **/
++    int read_vint32() const;
++    void read_vint32(int &) const;
++
++    void read_vint64(long long &) const;
++
++    /**
++     * String --> VInt, chars.
++     * Details about string, see http://lucene.apache.org/core/3_6_2/fileformats.html
++     */
++    //copy return
++    string read_string() const;
++    //reference read
++    bool read_string(string &) const;
++
++    /**
++     * Map --> Count, <String, String>^Count. Map just stores string
++     */
++    bool read_ssmap(map<string, string> &) const;
++
++    /* Read LuceneTerm from file */
++    bool read_term(LuceneTerm &) const;
++
++    /**
++     * Read LuceneTermInf
++     * Probably bug exists here, pay attention. FIXME 
++     **/
++    bool read_terminfo(LuceneTermInfo &, const unsigned int &) const;
++
++    /**
++     * Read doc delta and docfreq together
++     * 1. Read Vint32 first, if the most right bit is 1, then the freq=1
++     * 2. If the most right bit is 0, the freq = the next vint32
++     * 3. Doc delta = the first Vint32 >> 1;
++     * More details on http://lucene.apache.org/core/3_6_2/fileformats.html#Frequencies
++     */
++    bool read_did_and_freq(int &, int &) const;
++
++    /**
++     * Seek to some position in this file
++     * FIXME parameter is long, so just support <4G file
++     */
++    void seek_to(long) const;
++
++    /**
++     * Below is just for debug
++     **/
++    long get_ftell() const;
++};
++
++//inline function
++inline int reverse_order_int32(int data) {
++    int result = 0;
++    result |= (data &0x000000ff) << 24;
++    result |= (data &0x0000ff00) << 8;
++    result |= (data &0x00ff0000) >> 8;
++    result |= (data &0xff000000) >> 24;
++    return result;
++}
++
++inline long long reverse_order_int64(long long data) {
++    long long result = 0;
++    result |= (data &0x00000000000000ff) << 56; 
++    result |= (data &0x000000000000ff00) << 40;
++    result |= (data &0x0000000000ff0000) << 24;
++    result |= (data &0x00000000ff000000) << 8;
++    result |= (data &0x000000ff00000000) >> 8;
++    result |= (data &0x0000ff0000000000) >> 24;
++    result |= (data &0x00ff000000000000) >> 40;
++    result |= (data &0xff00000000000000) >> 56;
++    return result;
++}
++
++#endif
+diff --git a/xapian-core/backends/lucene/dir_contents b/xapian-core/backends/lucene/dir_contents
+new file mode 100644
+index 0000000..1cf87f9
+--- /dev/null
++++ b/xapian-core/backends/lucene/dir_contents
+@@ -0,0 +1,10 @@
++<Directory>backends/lucene</Directory>
++
++<Description>
++Chert is the default backend for the Xapian 1.2.x release series.
++It uses a custom written Btree management system to store
++posting lists and termlists.  This is a highly efficient
++backend, using compression to store the postlists, and supporting the
++full range of indexing functionality (positional information, transactions,
++etc).
++</Description>
+diff --git a/xapian-core/backends/lucene/lucene_database.cc b/xapian-core/backends/lucene/lucene_database.cc
+new file mode 100644
+index 0000000..22ee230
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_database.cc
+@@ -0,0 +1,477 @@
++
++#include <config.h>
++
++#include "lucene_database.h"
++#include "lucene_segdb.h"
++#include "lucene_document.h"
++
++#include <xapian/error.h>
++#include <xapian/valueiterator.h>
++#include <common/omassert.h>
++#include "backends/multi/multi_postlist.h"
++
++#include "debuglog.h"
++#include <sys/types.h>
++
++#include <algorithm>
++#include <string>
++#include <iostream>
++
++using namespace std;
++using namespace Xapian;
++using Xapian::Internal::intrusive_ptr;
++
++LuceneDatabase::LuceneDatabase(const string &lucene_dir) 
++        : db_dir(lucene_dir),
++          segmentgen_table(db_dir),
++          segment_table(db_dir)
++
++{
++    LOGCALL_CTOR(DB, "LuceneDatabase", lucene_dir);
++
++    create_and_open_tables();
++
++    return;
++}
++
++LuceneDatabase::~LuceneDatabase()
++{
++    LOGCALL_DTOR(DB, "LuceneDatabase");
++}
++
++/** Return the sum of doc count in all segments */
++Xapian::doccount
++LuceneDatabase::get_doccount() const
++{
++    LOGCALL(DB, Xapian::doccount, "LuceneDatabase::get_doccount", NO_ARGS);
++    Xapian::doccount count = segment_table.get_doccount();
++    RETURN(Xapian::doccount(count));
++}
++
++/**
++ * TODO lastdocid doesn't exists in Lucene
++ */
++Xapian::docid
++LuceneDatabase::get_lastdocid() const
++{
++    LOGCALL(DB, Xapian::docid, "(not realized)LuceneDatabase::get_lastdocid", NO_ARGS);
++    RETURN(Xapian::docid(1));
++}
++
++/**
++ * TODO there's no total_length(doc length) in lucene, this length is stored in 
++ * postlist.DB(with key '\0') in xapian, so... should I caculate this data by using 
++ * copydatabase tool and store it in somewhere
++*/
++totlen_t
++LuceneDatabase::get_total_length() const
++{
++    LOGCALL(DB, totlen_t, "(not realized)LuceneDatabase::get_total_length", NO_ARGS);
++    RETURN(1);
++}
++
++Xapian::doclength
++LuceneDatabase::get_avlength() const
++{
++    LOGCALL(DB, Xapian::doclength, "(not realized)LuceneDatabase::get_avlength", NO_ARGS);
++    RETURN(1);
++}
++
++Xapian::termcount
++LuceneDatabase::get_doclength(Xapian::docid did) const
++{
++    LOGCALL(DB, Xapian::termcount, "(not realized)LuceneDatabase::get_doclength", did);
++    RETURN(1);
++}
++
++Xapian::doccount
++LuceneDatabase::get_termfreq(const string & term) const
++{
++    LOGCALL(DB, Xapian::doccount, "(not realized) LuceneDatabase::get_termfreq", term);
++    Assert(!term.empty());
++
++    LuceneTerm lterm;
++    vector<intrusive_ptr<LuceneSegdb> >::const_iterator i;
++    Xapian::doccount doc_freq = 0;
++    for (i = seg_dbs.begin(); i != seg_dbs.end(); i++) {
++        (*i)->get_luceneterm(term, lterm);
++        doc_freq += (*i)->get_termfreq(lterm);
++    }
++
++    RETURN(doc_freq);
++}
++
++//TODO
++Xapian::termcount
++LuceneDatabase::get_collection_freq(const string & term) const
++{
++    LOGCALL(DB, Xapian::termcount, "(not realized)LuceneDatabase::get_collection_freq", term);
++    RETURN(0);
++}
++
++//TODO
++Xapian::doccount
++LuceneDatabase::get_value_freq(Xapian::valueno slot) const
++{
++    LOGCALL(DB, Xapian::doccount, "(not realized)LuceneDatabase::get_value_freq", slot);
++    RETURN(0);
++}
++
++//TODO
++std::string
++LuceneDatabase::get_value_lower_bound(Xapian::valueno slot) const
++{
++    LOGCALL(DB, std::string, "(not realized)LuceneDatabase::get_value_lower_bound", slot);
++    RETURN("");
++}
++
++//TODO
++std::string
++LuceneDatabase::get_value_upper_bound(Xapian::valueno slot) const
++{
++    LOGCALL(DB, std::string, "(not realized)LuceneDatabase::get_value_upper_bound", slot);
++    RETURN("");
++}
++
++//TODO
++Xapian::termcount
++LuceneDatabase::get_doclength_lower_bound() const
++{
++    LOGCALL(DB, Xapian::termcount, "(not realized)LuceneDatabase::get_doclength_lower_bound",
++                NO_ARGS);
++    return 1;
++}
++
++//TODO
++Xapian::termcount
++LuceneDatabase::get_doclength_upper_bound() const
++{
++    LOGCALL(DB, Xapian::termcount, "(not realized)LuceneDatabase::get_doclength_upper_bound",
++                NO_ARGS);
++    return 1;
++}
++
++//TODO
++Xapian::termcount
++LuceneDatabase::get_wdf_upper_bound(const string & term) const
++{
++    LOGCALL(DB, Xapian::termcount, "(not realized)LuceneDatabase::get_wdf_upper_bound",
++                term);
++    term.size();
++    return 1;
++}
++
++//TODO
++bool
++LuceneDatabase::term_exists(const string & term) const
++{
++    LOGCALL(DB, bool, "(not realized)LuceneDatabase::term_exists", term);
++    return false;
++}
++
++//TODO
++bool
++LuceneDatabase::has_positions() const
++{
++    LOGCALL(DB, bool, "(not realized)LuceneDatabase::has_positions", NO_ARGS);
++    return false;
++}
++
++LeafPostList *
++LuceneDatabase::open_post_list(const string & term) const
++{
++    LOGCALL(DB, LeafPostList*, "LuceneDatabase::open_post_list", term);
++
++    LuceneTerm lterm;
++    vector<LucenePostList *> pls;
++    try {
++    for (unsigned int i = 0; i < seg_dbs.size(); ++i) {
++        seg_dbs[i]->get_luceneterm(term, lterm);
++        LucenePostList * postlist = seg_dbs[i]->open_post_list(lterm);
++        if (NULL != postlist) {
++            postlist->set_seg_idx(i);
++            pls.push_back(postlist);
++        }
++    }
++    } catch (...) {
++        LOGLINE(API, "LuceneDatabase::open_post_list error");
++    }
++
++    intrusive_ptr<const LuceneDatabase> ptrtothis(this);
++    //temporary variable pls, pass it as a reference, memery leak?
++    RETURN(new LuceneMultiPostList(ptrtothis, pls, term));
++}
++
++//TODO
++ValueList *
++LuceneDatabase::open_value_list(Xapian::valueno slot) const
++{
++    LOGCALL(DB, ValueList *, "(not realized)LuceneDatabase::open_value_list", slot);
++    RETURN(0);
++}
++
++//TODO
++TermList *
++LuceneDatabase::open_term_list(Xapian::docid did) const
++{
++    LOGCALL(DB, TermList *, "(not realized)LuceneDatabase::open_term_list", did);
++    RETURN(0);
++}
++
++//TODO
++TermList *
++LuceneDatabase::open_allterms(const string & prefix) const
++{
++    LOGCALL(DB, TermList *, "(not realized)LuceneDatabase::open_allterms", NO_ARGS);
++    prefix.size();
++    RETURN(0);
++}
++
++//TODO
++PositionList *
++LuceneDatabase::open_position_list(Xapian::docid did, const string & term) const
++{
++    LOGCALL(DB, PositionList *, "(not realized)LuceneDatabase::open_position_list",
++                term);
++    term.substr(did);
++    return 0;
++}
++
++//TODO
++Xapian::Document::Internal *
++LuceneDatabase::open_document(Xapian::docid ext_did, bool lazy) const
++{
++    LOGCALL(DB, Xapian::Document::Internal *, "LuceneDatabase::open_document",
++                ext_did | lazy);
++
++    intrusive_ptr<const Database::Internal> ptrtothis(this);
++    unsigned int seg_idx = 0;
++    Xapian::docid seg_did = get_seg_docid(ext_did, seg_idx);
++
++    LOGLINE(DB, "LuceneDatabase::open_document, seg_idx=" << seg_idx);
++
++    Assert(seg_idx < segment_table.get_seg_count());
++
++    RETURN(new LuceneDocument(ptrtothis, seg_did, seg_dbs[seg_idx]));
++}
++
++//TODO
++TermList *
++LuceneDatabase::open_spelling_termlist(const string & word) const
++{
++    LOGCALL(DB, TermList *, "(not realized)LuceneDatabase::open_spelling_termlist",
++                word);
++    word.size();
++    return 0;
++}
++
++//TODO
++TermList *
++LuceneDatabase::open_spelling_wordlist() const
++{
++    LOGCALL(DB, TermList *, "(not realized)LuceneDatabase::open_spelling_wordlist",
++                NO_ARGS);
++    return 0;
++}
++
++//TODO
++Xapian::doccount
++LuceneDatabase::get_spelling_frequency(const string & word) const
++{
++    LOGCALL(DB, Xapian::doccount, "(not realized)LuceneDatabase::get_spelling_frequency",
++                word);
++    word.size();
++    return 0;
++}
++
++//TODO
++TermList *
++LuceneDatabase::open_synonym_termlist(const string & term) const
++{
++    LOGCALL(DB, TermList *, "(not realized)LuceneDatabase::open_synonym_termlist",
++                term);
++    term.size();
++    return 0;
++}
++
++//TODO
++TermList *
++LuceneDatabase::open_synonym_keylist(const string & prefix) const
++{
++    LOGCALL(DB, TermList *, "(not realized)LuceneDatabase::open_synonym_keylist",
++                prefix);
++    prefix.size();
++    return 0;
++}
++
++//TODO
++string
++LuceneDatabase::get_metadata(const string & key) const
++{
++    LOGCALL(DB, string, "(not realized)LuceneDatabase::get_metadata", key);
++    RETURN("");
++}
++
++//TODO
++TermList *
++LuceneDatabase::open_metadata_keylist(const std::string &prefix) const
++{
++    LOGCALL(DB, TermList *, "(not realized)LuceneDatabase::open_metadata_keylist",
++                NO_ARGS);
++    prefix.size();
++    return 0;
++}
++
++//TODO
++string
++LuceneDatabase::get_revision_info() const
++{
++    LOGCALL(DB, string, "(not realized)LuceneDatabase::get_revision_info",
++                NO_ARGS);
++    RETURN("");
++}
++
++//TODO
++string
++LuceneDatabase::get_uuid() const
++{
++    LOGCALL(DB, string, "(not realized)LuceneDatabase::get_uuid", NO_ARGS);
++    RETURN("");
++}
++
++//TODO
++bool
++LuceneDatabase::reopen()
++{
++    LOGCALL(DB, bool, "(not realized)LuceneDatabase::reopen", NO_ARGS);
++    return false;
++}
++
++//TODO
++void
++LuceneDatabase::close()
++{
++    LOGCALL_VOID(DB, "(not realized)LuceneDatabase::close", NO_ARGS);
++}
++
++//TODO
++void
++LuceneDatabase::cancel()
++{
++    LOGCALL_VOID(DB, "(not realized)LuceneDatabase::cancel", NO_ARGS);
++}
++
++//TODO
++void 
++LuceneDatabase::write_changesets_to_fd(int fd, 
++            const string &revision,
++            bool need_whole_db,
++            ReplicationInfo *info)
++{
++    LOGCALL_VOID(DB, "(not realized)LuceneDatabase::write_changesets_to_fd",
++                fd | revision | need_whole_db | info);
++}
++
++/*
++//可用版本，不过不支持多segment
++void
++LuceneDatabase::create_and_open_tables()
++{
++    LOGCALL(DB, void, "LuceneDatabase::create_and_open_tables", NO_ARGS);
++    segmentgen_table.open();
++    //for debug
++    segmentgen_table.debug_get_table();
++
++    //choose generationA for test
++    long long generation = segmentgen_table.get_generationA();
++    segment_table.set_filename(generation);
++    segment_table.open();
++    segment_table.debug_get_table();
++
++    //TODO suppose just one seg_count now
++    int seg_count = segment_table.get_seg_count();
++    cout << "segment->seg_count:" << seg_count << endl;
++    for (int i = 0; i < seg_count; ++i) {
++        string prefix = segment_table.get_seg_name(i);
++        index_reader.set_filename(prefix);
++        index_reader.create_and_open_tables();
++        
++        frq_table.set_filename(prefix);
++
++        fdtx_table.set_fdx_filename(prefix);
++        fdtx_table.set_fdt_filename(prefix);
++        fdtx_table.open();
++        break;
++    }
++}
++*/
++
++//Support multiple segments
++void
++LuceneDatabase::create_and_open_tables()
++{
++    LOGCALL(DB, void, "LuceneDatabase::create_and_open_tables", NO_ARGS);
++    segmentgen_table.open();
++    //Segmentgen_table.debug_get_table();
++
++    //Choose generationA for test
++    //TODO Actually, generation is chooseen from generationA and generationB
++    long long generation = segmentgen_table.get_generationA();
++    segment_table.set_filename(generation);
++    segment_table.open();
++    segment_table.debug_get_table();
++
++    int seg_count = segment_table.get_seg_count();
++    cout << "segment->seg_count:" << seg_count << endl;
++    for (int i = 0; i < seg_count; ++i) {
++        //File name prefix stores in segment table, for example _0
++        string prefix = segment_table.get_seg_name(i);
++        intrusive_ptr<LuceneSegdb> s_db(new LuceneSegdb(db_dir, prefix));
++        //Pay attention to the sequence, first in the front of vector
++        seg_dbs.push_back(s_db);
++    }
++
++    //open all the LuceneSegdb
++    vector<intrusive_ptr<LuceneSegdb> >::const_iterator i;
++    for (i = seg_dbs.begin(); i != seg_dbs.end(); i++) {
++        (*i)->create_and_open_tables();
++    }
++
++    return ;
++}
++
++Xapian::docid
++LuceneDatabase::get_ext_docid(Xapian::docid seg_did, int seg_idx) const {
++    LOGCALL(DB, Xapian::docid, "LuceneDatabase::get_ext_docid", seg_did |
++        seg_idx);
++
++    Xapian::docid base = segment_table.get_didbase(seg_idx);
++
++    RETURN(seg_did + base);
++}
++
++Xapian::docid
++LuceneDatabase::get_seg_docid(Xapian::docid ext_did,
++            unsigned int & seg_idx) const {
++    LOGCALL(DB, Xapian::docid, "LuceneDatabase::get_seg_docid", ext_did |
++        seg_idx);
++
++    Xapian::docid base = segment_table.get_didbase_and_segidx(ext_did, seg_idx);
++
++    RETURN(ext_did - base);
++}
++
++void
++LuceneDatabase::get_fieldinfo(set<string> & field_set) const {
++    LOGCALL(DB, void, "LuceneDatabase::get_fieldinfo", field_set.size());
++
++    vector<intrusive_ptr<LuceneSegdb> >::const_iterator it;
++    for (it = seg_dbs.begin(); it != seg_dbs.end(); ++it) {
++        set<string> seg_field;
++        (*it)->get_fieldinfo(seg_field);
++        field_set.insert(seg_field.begin(), seg_field.end());
++    }
++    LOGLINE(DB, "LuceneDatabase::get_fieldinfo, size=" << field_set.size());
++
++    return ;
++}
+diff --git a/xapian-core/backends/lucene/lucene_database.h b/xapian-core/backends/lucene/lucene_database.h
+new file mode 100644
+index 0000000..196ef4f
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_database.h
+@@ -0,0 +1,164 @@
++#ifndef OM_HGUARD_LUCENE_DATABASE_H
++#define OM_HGUARD_LUCENE_DATABASE_H
++
++#include "backends/database.h"
++#include "internaltypes.h"
++
++#include "backends/valuestats.h"
++#include "lucene_segmentgentable.h"
++#include "lucene_segmenttable.h"
++
++#include "noreturn.h"
++
++#include <map>
++#include <vector>
++#include <set>
++
++using namespace std;
++
++/**
++ * preforward declairatoin, otherwise loop include .h will occurrence
++ * because using LuceneDatabase in lucene_frqtable.h and using LuceneFrqtable
++ * in LuceneDatabase
++ */
++class LuceneSegdb;
++
++/** A backend designed for Lucene Database
++ */
++class LuceneDatabase : public Xapian::Database::Internal {
++    std::string db_dir;
++
++    /* For segments.gen */
++    LuceneSegmentGenTable segmentgen_table;
++
++    /* For segments_x, all segments' basic info are stored here */
++    LuceneSegmentTable segment_table;
++
++    /** Put all LuceneSegdb in a vector, and smart ptr is used
++     */
++    //contains all segments
++    vector<Xapian::Internal::intrusive_ptr<LuceneSegdb> > seg_dbs;
++
++    /** Init Lucene database. Just open all LuceneSegdbs in the database
++     */
++    void create_and_open_tables();
++
++  public:
++    LuceneDatabase(const string &db_dir);
++    /**
++     * Convert segment docid to external(whole db) docid.
++     * Segment docid means docid in the segment, different doc in different
++     * segment may have the same segment docid, but external docid is uniq
++     * in the whole database.
++     * external docid = biggest external docid in previous segment + segment docid
++     * for example:
++     * segment_0 has 100 doc, it's biggest external docid is 100, in segment_1,
++     * the external docid  = 100 + segment docid
++     *
++     * This method doesn't support write occurrence, for example 
++     * 1. call ext_did = get_ext_docid(seg_did)
++     * 2. write occurs, seg_size is changed
++     * 3. call get_seg_docid(ext_did), the return value may
++     *    not eq ext_did
++     */
++    Xapian::docid get_ext_docid(Xapian::docid seg_did, int seg_idx) const;
++
++    /**
++     * Convert external docid to segment docid.
++     * see get_ext_docid for external docid and segment docid
++     */
++    Xapian::docid get_seg_docid(Xapian::docid ext_did, unsigned int & seg_idx) const;
++
++    /** virtual method of Database::Internal */
++    //@{
++    /** This interface is only for Lucene.
++     * Get all field name in database
++     */
++    void get_fieldinfo(set<string> & field_set) const;
++
++    Xapian::doccount get_doccount() const;
++    Xapian::docid get_lastdocid() const;
++    //TODO
++    totlen_t get_total_length() const;
++
++    /* TODO totallength doesn't exits in Lucene, so avlength lacks */
++    Xapian::doclength get_avlength() const;
++
++    /* In ChertDatabase, this seems returns wdf, not doclength */
++    Xapian::termcount get_doclength(Xapian::docid did) const;
++
++    /** 
++     * termfreq here means how many document contains the termcount
++     * TODO, there's no field number parameter, I think it should stored
++     * in Query Object first, and pass it to somewhere in DB
++     */
++    Xapian::doccount get_termfreq(const string &tname) const;
++
++    Xapian::termcount get_collection_freq(const string &tname) const;
++    Xapian::doccount get_value_freq(Xapian::valueno slot) const;
++    std::string get_value_lower_bound(Xapian::valueno slot) const;
++    std::string get_value_upper_bound(Xapian::valueno slot) const;
++    Xapian::termcount get_doclength_lower_bound() const;
++    Xapian::termcount get_doclength_upper_bound() const;
++    Xapian::termcount get_wdf_upper_bound(const std::string & term) const;
++    bool term_exists(const string & tname) const;
++    bool has_positions() const;
++
++    /**
++     * One Lucene DB contains lots of segments, one postlist per segment,
++     * so I put all postlists in a vector
++     *
++     * Support multiple segments.
++     * One Lucene database has lots of segments, each segment has a postlist,
++     * so one Lucene database may has lots of postlists, LuceneMultiPostlist
++     * is used to support this feature
++     * One database has one LuceneMultiPostlist, in order to make xapian interface
++     * compatible
++     */
++    LeafPostList * open_post_list(const string & tname) const;
++
++    ValueList * open_value_list(Xapian::valueno slot) const;
++    TermList * open_term_list(Xapian::docid did) const;
++    TermList * open_allterms(const string & prefix) const;
++    PositionList * open_position_list(Xapian::docid did, const string & tname) const;
++
++    /** @param 1 is external docid, @param 2 is not used yet
++     * open a Lucene Document
++     */
++    Xapian::Document::Internal *open_document(Xapian::docid did, bool lazy) const;
++
++    TermList * open_spelling_termlist(const string & word) const;
++    TermList * open_spelling_wordlist() const;
++    Xapian::doccount get_spelling_frequency(const string & word) const;
++    //void add_spelling(const string & word, Xapian::termcount freqinc) const;
++    //void remove_spelling(const string & word, Xapian::termcount freqdec) const;
++    TermList * open_synonym_termlist(const string & term) const;
++    TermList * open_synonym_keylist(const string & prefix) const;
++    //void add_synonym(const string & term, const string & synonym) const;
++    //void remove_synonym(const string & term, const string & synonym) const;
++    //void clear_synonyms(const string & term) const;
++    string get_metadata(const string & key) const;
++    TermList * open_metadata_keylist(const std::string &prefix) const;
++    //void set_metadata(const string & key, const string & value);
++    bool reopen();
++    void close();
++    //void commit();
++    void cancel();
++    //Xapian::docid add_document(const Xapian::Document & document);
++    //void delete_document(Xapian::docid did);
++    //void delete_document(const string & unique_term);
++    //void replace_document(Xapian::docid did, const Xapian::Document & document);
++    //Xapian::docid replace_document(const string & unique_term, const Xapian::Document & document);
++    //void request_document(Xapian::docid /*did*/) const;
++    //Xapian::Document::Internal * collect_document(Xapian::docid did) const;
++    void write_changesets_to_fd(int fd, const std::string & start_revision, bool need_whole_db, Xapian::ReplicationInfo * info);
++    string get_revision_info() const;
++    string get_uuid() const;
++    //void invalidate_doc_object(Xapian::Document::Internal * obj) const;
++    //RemoteDatabase * as_remotedatabase();
++    // @}
++
++    ~LuceneDatabase();
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_document.cc b/xapian-core/backends/lucene/lucene_document.cc
+new file mode 100644
+index 0000000..761dfeb
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_document.cc
+@@ -0,0 +1,122 @@
++
++#include "lucene_document.h"
++
++using Xapian::Internal::intrusive_ptr;
++
++LuceneDocument::LuceneDocument(intrusive_ptr<const Xapian::Database::Internal> db_,
++            Xapian::docid did_,
++            intrusive_ptr<const LuceneSegdb> seg_db_)
++        : Xapian::Document::Internal(db_, did_),
++        seg_db(seg_db_),
++        has_read(false)
++{
++    LOGCALL_CTOR(DB, "LuceneDocument", did_);
++}
++
++LuceneDocument::~LuceneDocument() {
++    LOGCALL_DTOR(DB, "LuceneDocument");
++}
++
++void
++LuceneDocument::get_data() {
++    LOGCALL(DB, void, "LuceneDocument::get_data", did);
++
++    seg_db->get_record(did, string_map, int_map, long_map, float_map,
++                double_map);
++}
++
++string
++LuceneDocument::get_data_string(const string & field) {
++    LOGCALL(DB, string, "LuceneDocument::get_data_string", field);
++
++    if (false == has_read) {
++        get_data();
++        has_read = true;
++    }
++
++    int field_num = seg_db->get_fieldnum(field);
++    map<int, string>::const_iterator it = string_map.begin();
++    it = string_map.find(field_num);
++    if (it == string_map.end()) {
++        RETURN("");
++    }
++
++    RETURN(it->second);
++}
++
++int
++LuceneDocument::get_data_int(const string & field) {
++    LOGCALL(DB, int, "LuceneDocument::get_data_int", field);
++
++    if (false == has_read) {
++        get_data();
++        has_read = true;
++    }
++
++    int field_num = seg_db->get_fieldnum(field);
++    map<int, int>::const_iterator it = int_map.begin();
++    it = int_map.find(field_num);
++    //FIXME It's suitable to return 0 when no found
++    if (it == int_map.end()) {
++        RETURN(0);
++    }
++
++    RETURN(it->second);
++}
++
++long
++LuceneDocument::get_data_long(const string & field) {
++    LOGCALL(DB, long, "LuceneDocument::get_data_long", field);
++
++    if (false == has_read) {
++        get_data();
++        has_read = true;
++    }
++
++    int field_num = seg_db->get_fieldnum(field);
++    map<int, long>::const_iterator it = long_map.begin();
++    it = long_map.find(field_num);
++    if (it == long_map.end()) {
++        RETURN(0.0);
++    }
++
++    RETURN(it->second);
++}
++
++float
++LuceneDocument::get_data_float(const string & field) {
++    LOGCALL(DB, float, "LuceneDocument::get_data_float", field);
++
++    if (false == has_read) {
++        get_data();
++        has_read = true;
++    }
++
++    int field_num = seg_db->get_fieldnum(field);
++    map<int, float>::const_iterator it = float_map.begin();
++    it = float_map.find(field_num);
++    if (it == float_map.end()) {
++        RETURN(0.0);
++    }
++
++    RETURN(it->second);
++}
++
++double
++LuceneDocument::get_data_double(const string & field) {
++    LOGCALL(DB, double, "LuceneDocument::get_data_double", field);
++
++    if (false == has_read) {
++        get_data();
++        has_read = true;
++    }
++
++    int field_num = seg_db->get_fieldnum(field);
++    map<int, double>::const_iterator it = double_map.begin();
++    it = double_map.find(field_num);
++    if (it == double_map.end()) {
++        RETURN(0.0);
++    }
++
++    RETURN(it->second);
++}
+diff --git a/xapian-core/backends/lucene/lucene_document.h b/xapian-core/backends/lucene/lucene_document.h
+new file mode 100644
+index 0000000..84d804c
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_document.h
+@@ -0,0 +1,92 @@
++
++#ifndef XAPIAN_INCLUDED_LUCENE_DOCUMENT_H
++#define XAPIAN_INCLUDED_LUCENE_DOCUMENT_H
++
++#include "config.h"
++#include "xapian/intrusive_ptr.h"
++#include "backends/document.h"
++#include "lucene_segdb.h"
++
++/**
++ */
++class LuceneDocument : public Xapian::Document::Internal {
++    friend class LuceneDatabase;
++    Xapian::Internal::intrusive_ptr<const LuceneSegdb> seg_db;
++
++    //Private constructor, only called by open_document
++    LuceneDocument(Xapian::Internal::intrusive_ptr<const Xapian::Database::Internal>,
++                Xapian::docid,
++                Xapian::Internal::intrusive_ptr<const LuceneSegdb>);
++
++    /**
++     * If Data has been read before.
++     * If true, document record is stored in string_map/int_map/long_map/float_map/double_map
++     * Otherwith, these maps are empty
++     **/
++    bool has_read;
++
++    /**
++     * Data from .fdt, now five type are supported. First data is field number,
++     * second is real data
++     * TODO
++     * C++ has no Object clsss like Java, so I have to use different map to store
++     * different data. In Java, map<int, Object> may works, but C++ doesn't
++     * 
++     * Lucene has these types of data
++     * 1. low order bit is one for tokenized fields
++     * 2. second bit is one for fields containing binary data
++     * 3. third bit is one for fields with compression option enabled (if compression is enabled, the algorithm used is ZLIB), only available for indexes until Lucene version 2.9.x
++     * 4. 4th to 6th bit (mask: 0x7<<3) define the type of a numeric field:
++     *   1). all bits in mask are cleared if no numeric field at all
++     *   2). 1<<3: Value is Int
++     *   3). 2<<3: Value is Long
++     *   4). 3<<3: Value is Int as Float (as of Float.intBitsToFloat)
++     *   4). 4<<3: Value is Long as Double (as of Double.longBitsToDouble)
++     * More details on http://lucene.apache.org/core/3_6_2/fileformats.html
++     * TODO, Now just string type of data is supported
++     */
++    map<int, string> string_map;
++    map<int, int> int_map;
++    map<int, long> long_map;
++    map<int, float> float_map;
++    map<int, double> double_map;
++
++    /* Get corresponding field number to the @para field name */
++    int get_fieldnum(const string & field) const;
++
++    /* Read document record in file, and store them in maps above */
++    void get_data();
++
++  public:
++    ~LuceneDocument();
++
++    /** Virtual function from Document::Internal */
++    /**
++     * Called in document.h->get_data()
++     * NOT USED in Lucene
++     */
++    //void do_get_data();
++
++    /**
++     * Read data from maps. If has not read before, get_data() first.
++     * Lucene has lots of data type, so one get_data_xxx for each data type.
++     * These functions can merged? Using polymorphism, or Template
++     */
++
++    /* Read data from string_map */
++    std::string get_data_string(const std::string & field);
++
++    /* Read data from int_map */
++    int get_data_int(const std::string & field);
++
++    /* Read data from long_map */
++    long get_data_long(const std::string & field);
++
++    /* Read data from float_map */
++    float get_data_float(const std::string & field);
++
++    /* Read data from double_map */
++    double get_data_double(const std::string & field);
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_fdtxtable.cc b/xapian-core/backends/lucene/lucene_fdtxtable.cc
+new file mode 100644
+index 0000000..4410b54
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_fdtxtable.cc
+@@ -0,0 +1,111 @@
++
++#include "lucene_fdtxtable.h"
++#include "lucene_segdb.h"
++#include "debuglog.h"
++#include "internaltypes.h"
++#include "xapian/intrusive_ptr.h"
++
++#include <iostream>
++
++//this line is for debug
++#include <cstdlib>
++
++using namespace std;
++using Xapian::Internal::intrusive_ptr;
++
++LuceneFdtxTable::LuceneFdtxTable(const string & db_dir_)
++        : db_dir(db_dir_),
++        fdx_reader(db_dir),
++        fdt_reader(db_dir)
++{
++    LOGCALL_CTOR(DB, "LuceneFdtxTable", NO_ARGS);
++}
++
++LuceneFdtxTable::~LuceneFdtxTable() {
++    LOGCALL_DTOR(DB, "LuceneFdtxTable");
++}
++
++void
++LuceneFdtxTable::set_fdx_filename(const string & prefix) {
++    //The file name has fixed suffix '.fdx'
++    fdx_filename = prefix + ".fdx";
++    fdx_reader.set_filename(fdx_filename);
++
++    return ;
++}
++
++void
++LuceneFdtxTable::set_fdt_filename(const string & prefix) {
++    //The file name has fixed suffix '.fdt'
++    fdt_filename = prefix + ".fdt";
++    fdt_reader.set_filename(fdt_filename);
++
++    return ;
++}
++
++void
++LuceneFdtxTable::set_filename(const string & prefix) {
++    set_fdt_filename(prefix);
++    set_fdx_filename(prefix);
++}
++
++bool
++LuceneFdtxTable::open() {
++    LOGCALL(DB, bool, "LuceneFdtxTable::open", fdt_filename | fdx_filename);
++
++    //Just open files
++    fdx_reader.open_stream();
++    fdt_reader.open_stream();
++
++    return true;
++}
++
++//TODO, just support data type of string now
++void
++LuceneFdtxTable::get_record(Xapian::docid did, map<int, string> & string_map,
++            map<int, int> & int_map, map<int, long> & long_map,
++            map<int, float> & float_map, map<int, double> double_map) const {
++    LOGCALL(API, string, "(not realized)LuceneFdtxTable::get_record",
++                did);
++
++    //There's a Version num in the front of .fdx, which size is 4 bytes, so skip it
++    int fdx_offset = 4 + did * 8;
++    //TODO, seek_to must support int64 later
++    fdx_reader.seek_to(fdx_offset);
++    long long fdt_offset = 0;
++    fdx_reader.read_int64(fdt_offset);
++
++    fdt_reader.seek_to(fdt_offset);
++    int field_count = 0;
++    fdt_reader.read_vint32(field_count);
++
++    /*
++    cout << "LuceneFdtxTable::get_record field_count=" << field_count << 
++        " fdx_offset=" << fdx_offset << ",fdt_offset=" << fdt_offset <<
++        endl;
++        */
++
++    //Just read data type of string, others(tokenized/binary/compression/
++    //numeric) not support yet
++    for (int i = 0; i < field_count; ++i) {
++        int field_num = 0;
++        fdt_reader.read_vint32(field_num);
++
++        char bits = '\0';
++        fdt_reader.read_byte(bits);
++
++        string record = "";
++        fdt_reader.read_string(record);
++
++        cout << "LuceneFdtxTable::get_record field_num=" << field_num << 
++            ", bits=" << (int)bits << 
++            ", record=" << record << endl;
++        string_map.insert(pair<int, string>(field_num, record));
++    }
++
++    int_map.size();
++    long_map.size();
++    float_map.size();
++    double_map.size();
++}
++
+diff --git a/xapian-core/backends/lucene/lucene_fdtxtable.h b/xapian-core/backends/lucene/lucene_fdtxtable.h
+new file mode 100644
+index 0000000..d89eefa
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_fdtxtable.h
+@@ -0,0 +1,53 @@
++
++#ifndef XAPIAN_INCLUDED_LUCENE_FDTXTABLE_H
++#define XAPIAN_INCLUDED_LUCENE_FDTXTABLE_H
++
++#include "config.h"
++#include "bytestream.h"
++
++class LuceneSegdb;
++
++class LuceneFdtxTable {
++    friend class LuceneSegdb;
++
++    string db_dir;
++    /* File name for .fdx */
++    string fdx_filename;
++
++    /* File reader for .fdx */
++    ByteStreamReader fdx_reader;
++
++    /* File name for .fdt */
++    string fdt_filename;
++    
++    /* File reader for .fdt */
++    ByteStreamReader fdt_reader;
++
++    void set_fdx_filename(const string &);
++    void set_fdt_filename(const string &);
++
++  public:
++    LuceneFdtxTable(const string &);
++    ~LuceneFdtxTable();
++
++    void set_filename(const string &);
++
++    /* Open .fdt and .fdx files */
++    bool open();
++
++    /**
++     * Read document content from .fdt and .fdx, and store them in thess maps
++     * @para 2: date type is string
++     * @para 3: data type is int
++     * @para 4: data type is long
++     * @para 5: data type is float
++     * @para 6: data type is double
++     *
++     * TODO
++     * Lucene has other data type, like binary data, is not supported here
++     */
++    void get_record(Xapian::docid , map<int, string> &, map<int, int> &,
++        map<int, long> &, map<int, float> &, map<int, double>) const;
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_fnmtable.cc b/xapian-core/backends/lucene/lucene_fnmtable.cc
+new file mode 100644
+index 0000000..4ebc66a
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_fnmtable.cc
+@@ -0,0 +1,66 @@
++
++#include "lucene_fnmtable.h"
++#include "config.h"
++#include "debuglog.h"
++#include <iostream>
++
++using namespace std;
++
++LuceneFnmTable::LuceneFnmTable(const string &db_dir_) 
++        : db_dir(db_dir_),
++        stream_reader(db_dir_)
++{
++}
++
++bool
++LuceneFnmTable::set_filename(const string & prefix) {
++    file_name = prefix + ".fnm";
++    stream_reader.set_filename(file_name);
++
++    return true;
++}
++
++void
++LuceneFnmTable::open() {
++    LOGCALL(DB, bool, "LuceneFnmTable::open", NO_ARGS);
++
++    stream_reader.open_stream();
++
++    stream_reader.read_vint32(fnm_version);
++    stream_reader.read_vint32(fields_count);
++    string name;
++    char bit;
++    for (int i = 0; i < fields_count; ++i) {
++        stream_reader.read_string(name);
++        stream_reader.read_byte(bit);
++        field_name.push_back(name);
++        field_bits.push_back(bit);
++
++        field_map.insert(pair<string, int>(name, i));
++    }
++
++    return ;
++}
++
++vector<string>
++LuceneFnmTable::get_field_name() const {
++    return field_name;
++}
++
++/**
++ * below is for debug
++ */
++void LuceneFnmTable::debug_get_table() {
++    cout << "fnm-->FNMVersion[" << fnm_version << "],fieldsCount[" <<
++        fields_count << "],fields<" << endl;
++    for (int i = 0; i < fields_count; ++i) {
++        cout << "FieldName[" << field_name[i] << "], bits[";
++        for (int j = 7; j >= 0; --j) {
++            int t = (field_bits[i] >> j) & 0x00000001;
++            cout << t << ",";
++        }
++        cout << "]," << endl;
++    }
++
++    cout << ">" << endl;
++}
+diff --git a/xapian-core/backends/lucene/lucene_fnmtable.h b/xapian-core/backends/lucene/lucene_fnmtable.h
+new file mode 100644
+index 0000000..2960f2f
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_fnmtable.h
+@@ -0,0 +1,72 @@
++
++#ifndef XAPIAN_INCLUDED_LUCENE_FNMTABLE_H
++#define XAPIAN_INCLUDED_LUCENE_FNMTABLE_H
++
++#include "bytestream.h"
++#include <vector>
++#include <map>
++
++class LuceneFnmTable {
++    friend class LuceneSegdb;
++
++    /* Lucene database directory */
++    string db_dir;
++
++    /* .fnm file name */
++    string file_name;
++    
++    /* version number */
++    int fnm_version;
++
++    /* How many fields in this segment table */
++    int fields_count;
++
++    /**
++     * Field names, field number is the vector index
++     * For example, field_name[0]'s field number is 0
++     * field_name[1]'s field number is 1, etc...
++     **/
++    vector<string> field_name;
++
++    /**
++     * Field attributes, more details http://lucene.apache.org/core/3_6_2/fileformats.html#field_data
++     *
++     * 1. low order bit is one for tokenized fields
++     * 2. second bit is one for fields containing binary data
++     * 3. third bit is one for fields with compression option enabled (if compression is enabled, the algorithm used is ZLIB), only available for indexes until Lucene version 2.9.x
++     * 4. 4th to 6th bit (mask: 0x7<<3) define the type of a numeric field:
++     *   1). all bits in mask are cleared if no numeric field at all
++     *   2). 1<<3: Value is Int
++     *   3). 2<<3: Value is Long
++     *   4): 3<<3: Value is Int as Float (as of Float.intBitsToFloat)
++     *   5): 4<<3: Value is Long as Double (as of Double.longBitsToDouble)
++     **/
++    vector<char> field_bits;
++
++    /**
++     * Map for field_name --> field_number
++     * First data is field name, second is field number
++     * Used for LuceneDocument.get_data_xxx(), mapping field name to field number
++     */
++    map<string, int> field_map;
++
++    /* .fnm file reader */
++    ByteStreamReader stream_reader;
++
++  public:
++    LuceneFnmTable(const string &db_dir);
++
++    /* set file_name */
++    bool set_filename(const string &);
++
++    /* open .fnm file */
++    void open();
++
++    /* return field_name */
++    vector<string> get_field_name() const;
++
++    /* below is for debug */
++    void debug_get_table();
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_frqtable.cc b/xapian-core/backends/lucene/lucene_frqtable.cc
+new file mode 100644
+index 0000000..d3cfc72
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_frqtable.cc
+@@ -0,0 +1,354 @@
++
++#include "lucene_frqtable.h"
++#include "debuglog.h"
++#include <iostream>
++
++using namespace std;
++using Xapian::Internal::intrusive_ptr;
++
++LuceneFrqTable::LuceneFrqTable(const string & db_dir_)
++        :db_dir(db_dir_),
++        stream_reader(db_dir_)
++{
++}
++
++LuceneFrqTable::~LuceneFrqTable() {
++    LOGCALL_DTOR(DB, "LuceneFrqTable");
++}
++
++bool
++LuceneFrqTable::set_filename(const string & prefix) {
++    file_name = prefix + ".frq";
++    stream_reader.set_filename(file_name);
++
++    return true;
++}
++
++const string &
++LuceneFrqTable::get_filename() const {
++    return file_name;
++}
++
++const string &
++LuceneFrqTable::get_dbdir() const {
++    return db_dir;
++}
++
++LucenePostList::LucenePostList(const string & term_, int doc_freq_,
++            int freq_delta_, int skip_delta_, const string &
++            db_dir_, const string & file_name_)
++        : doc_freq(doc_freq_),
++        freq_delta(freq_delta_),
++        skip_delta(skip_delta_),
++        db_dir(db_dir_),
++        file_name(file_name_),
++        docfreq_reader(db_dir_, file_name_),
++        did(0),
++        wdf(-1),
++        c(0),
++        seg_idx(-1),
++        is_at_end(false)
++{
++    LOGCALL_CTOR(API, "LucenePostList::LucenePostList", term_ | doc_freq |
++                freq_delta | skip_delta | file_name);
++
++    term = term_;
++    
++    docfreq_reader.seek_to(freq_delta);
++
++    /* debug
++    debug_postlist();
++    */
++}
++
++Xapian::doccount
++LucenePostList::get_termfreq() const {
++    LOGCALL(API, Xapian::doccount, "LucenePostList::get_termfreq", file_name);
++
++    RETURN(doc_freq);
++}
++
++Xapian::docid
++LucenePostList::get_docid() const {
++    cout << "(not realized)LucenePostList::get_docid, did=" << did << endl;
++    return did;
++}
++
++Xapian::termcount
++LucenePostList::get_doclength() const {
++    cout << "(not realized)LucenePostList::get_doclength" << endl;
++
++    return 1;
++}
++
++bool
++LucenePostList::at_end() const {
++    LOGCALL(API, bool, "LucenePostList::at_end", file_name);
++
++    RETURN(is_at_end);
++}
++
++PostList *
++LucenePostList::next(double data) {
++    LOGCALL(API, PostList *, "LucenePostList::next", file_name | data );
++
++    if (c >= doc_freq) {
++        is_at_end = true;
++        RETURN(NULL);
++    }
++
++    int doc_delta = 0;
++    int freq = 0;
++    docfreq_reader.read_did_and_freq(doc_delta, freq);
++
++    did = did + doc_delta;
++    wdf = freq;
++    ++c;
++
++    LOGLINE(API, "LucenePostList::next did=" << did << ", wdf=" << wdf <<
++                ", doc_delta=" << doc_delta);
++
++    RETURN(NULL);
++}
++
++//这个函数应该使用skiplist来查找，顺序查找的话文件指针无法回溯
++PostList *
++LucenePostList::skip_to(Xapian::docid desire_did,
++            double data) {
++    LOGCALL(API, PostList *, "LucenePostList::skip_to", desire_did| data);
++
++    //just a simple realization, not using skiplist
++    while (true) {
++        next(data);
++        if (at_end()) {
++            break;
++        }
++
++        did = get_docid();
++        //Docids in postlist are ordered
++        if (desire_did <= did) {
++            break;
++        }
++    }
++
++    RETURN(NULL);
++}
++
++std::string
++LucenePostList::get_description() const {
++    cout << "(not realized)LucenePostList::get_description" << endl;
++
++    return "";
++}
++
++Xapian::termcount
++LucenePostList::get_wdf() const {
++    return wdf;
++}
++
++void
++LucenePostList::set_seg_idx(int idx) {
++    seg_idx = idx;
++
++    return ;
++}
++
++unsigned int
++LucenePostList::get_seg_idx() const {
++    return seg_idx;
++}
++
++LuceneMultiPostList::LuceneMultiPostList(intrusive_ptr<const LuceneDatabase> this_db_,
++            const vector<LucenePostList *> & pls_,
++            const string & term_)
++        : LeafPostList(term_),
++        this_db(this_db_),
++        pls(pls_),
++        c_did(0),
++        pls_index(0)
++{
++    LOGCALL_CTOR(API, "LuceneMultiPostList", pls_);
++}
++
++Xapian::doccount
++LuceneMultiPostList::get_termfreq() const {
++    LOGCALL(API, Xapian::doccount, "LuceneMultiPostList::get_termfreq", pls.size());
++
++    vector<LucenePostList *>::const_iterator i;
++    Xapian::doccount c = 0;
++    for (i = pls.begin(); i != pls.end(); ++i) {
++        c += (*i)->get_termfreq();
++    }
++
++    RETURN(c);
++}
++
++Xapian::docid
++LuceneMultiPostList::get_docid() const {
++    LOGCALL(API, Xapian::docid, "LuceneMultiPostList::get_docid", term |
++                pls_index | (unsigned int)this);
++
++    //c_did setted in LuceneMultiPostList::next()
++    //Caculate ext_did, which include segment index infomation
++    LucenePostList * postlist = pls[pls_index];
++
++    LOGLINE(API, "LuceneMultiPostList::get_docid, c_did=" << c_did <<
++                ", seg_idx=" << postlist->get_seg_idx());
++
++    //Using Lucene's docid caculation method
++    RETURN(this_db->get_ext_docid(c_did, postlist->get_seg_idx()));
++    
++    //Like Xapian's docid caculation method
++    //RETURN(c_did * pls.size() + postlist->get_seg_idx());
++}
++
++Xapian::termcount
++LuceneMultiPostList::get_doclength() const {
++    LOGCALL(API, Xapian::termcount, "(not realized) LuceneMultiPostList::get_doclength", term);
++
++    RETURN(1);
++}
++
++PostList *
++LuceneMultiPostList::next(double data) {
++    LOGCALL(API, PostList *, "LuceneMultiPostList::next", term
++                | pls_index | pls.size() | data | (unsigned int)this);
++
++    if (pls_index >= pls.size()) {
++        return NULL;
++    }
++
++    for (; pls_index < pls.size(); ++pls_index) {
++        LucenePostList * postlist = pls[pls_index];
++        postlist->next(data);
++        if (! postlist->at_end()) {
++            c_did = postlist->get_docid();
++            break;
++        }
++    }
++
++    return NULL;
++}
++
++bool
++LuceneMultiPostList::at_end() const {
++    LOGCALL(API, bool, "LuceneMultiPostList::at_end", NO_ARGS);
++
++    if (pls_index >= pls.size()) {
++        RETURN(true);
++    }
++
++    RETURN(false);
++}
++
++string
++LuceneMultiPostList::get_description() const {
++    LOGCALL(API, string, "(not realized)LuceneMultiPostList::get_description",
++                (unsigned int)this);
++
++    return "";
++}
++
++PostList *
++LuceneMultiPostList::skip_to(Xapian::docid ext_did, double data) {
++    LOGCALL(API, PostList *, "LuceneMultiPostList::skip_to", ext_did | data);
++
++    /* FIXME, if next() is not called before, get_docid() will get a unknown result */
++    //No need to find in postlist
++    Xapian::docid c_ext_did = get_docid();
++    if (ext_did <= c_ext_did || at_end())
++        RETURN(NULL);
++
++    //Convert ext_did to within segment did, and get segment index
++    unsigned int seg_idx = 0;
++    Xapian::docid seg_did = this_db->get_seg_docid(ext_did, seg_idx);
++
++    for (; pls_index < pls.size(); pls_index++) {
++        if (seg_idx == pls[pls_index]->get_seg_idx()) {
++            break;
++        }
++    }
++
++    if (at_end()) {
++        //Xapian::docid is unsigned, but did=0 is available in Lucene
++        //c_did = 0;
++        RETURN(NULL);
++    }
++
++    LOGLINE(API, "LuceneMultiPostList::skip_to, pls_index=" << pls_index <<
++                ", seg_idx=" << seg_idx);
++
++    pls[pls_index]->skip_to(seg_did, data);
++    //Skip to the first doc which after pls[pls_index]
++    if (pls[pls_index]->at_end()) {
++        pls_index++;
++        //Skip to the first doc after pls[pls_index]
++        for (; pls_index < pls.size(); pls_index++) {
++            pls[pls_index]->skip_to(0, data);
++            if (! pls[pls_index]->at_end()) {
++                break;
++            }
++        }
++    }
++
++    if (! at_end()) {
++        c_did = pls[pls_index]->get_docid();
++    }
++
++    LOGLINE(API, "LuceneMultiPostList::skip_to, c_did=" << c_did);
++
++    return NULL;
++}
++
++/*
++PostList *
++LuceneMultiPostList::check(Xapian::docid ext_did, double w_min,
++            bool & valid) {
++    LOGCALL(API, PostList *, "LuceneMultiPostList::check", ext_did | w_min
++                | valid);
++
++    valid = false;
++    skip_to(ext_did, w_min);
++    if (at_end()) {
++        valid = true;
++        RETURN(NULL);
++    }
++
++    Xapian::docid new_did = get_docid();
++    if (ext_did == new_did)
++      valid = true;
++
++    RETURN(NULL);
++}
++*/
++
++Xapian::termcount
++LuceneMultiPostList::get_wdf() const {
++    LOGCALL(API, Xapian::termcount, "LuceneMultiPostList::get_wdf", NO_ARGS);
++
++    LucenePostList * postlist = pls[pls_index];
++
++    RETURN(postlist->get_wdf());
++}
++
++/**
++ * below is for debug
++ */
++void
++LucenePostList::debug_postlist() const {
++    //SkipDelta is only stored if DocFreq is not smaller than SkipInterval
++    cout << "ftetll:" << docfreq_reader.get_ftell() << 
++        " freq_delta:" << freq_delta <<
++        " skip_delta:" << skip_delta << 
++        " doc_freq:" << doc_freq << endl;
++    cout << "LucenePostList::debug_postlist->";
++    for (int i = 0; i < doc_freq; ++i) {
++        int doc_delta = 0;
++        int freq = 0;
++        docfreq_reader.read_did_and_freq(doc_delta, freq);
++        cout << "doc_delta[" << doc_delta <<
++            "],freq[" << freq << "],";
++    }
++
++    cout << endl;
++}
+diff --git a/xapian-core/backends/lucene/lucene_frqtable.h b/xapian-core/backends/lucene/lucene_frqtable.h
+new file mode 100644
+index 0000000..1420485
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_frqtable.h
+@@ -0,0 +1,185 @@
++
++#ifndef XAPIAN_INCLUDED_LUCENE_FRQTABLE_H
++#define XAPIAN_INCLUDED_LUCENE_FRQTABLE_H
++
++#include <xapian/database.h>
++#include "config.h"
++#include "internaltypes.h"
++#include "xapian/intrusive_ptr.h"
++#include "bytestream.h"
++#include "api/leafpostlist.h"
++#include "lucene_database.h"
++
++#include <vector>
++
++using namespace std;
++
++/**
++ * LuceneFrqTable is similar to ChertPostListTable in Xapian
++ * The .frq file contains the lists of documents which contain each term,
++ * along with the frequency of the term in that document
++ *
++ * FreqFile (.frq) --> <TermFreqs, SkipData> TermCount
++ * TermFreqs --> <TermFreq> DocFreq
++ * TermFreq --> DocDelta[, Freq?]
++ * SkipData --> <<SkipLevelLength, SkipLevel> NumSkipLevels-1, SkipLevel> <SkipDatum>
++ * SkipLevel --> <SkipDatum> DocFreq/(SkipInterval^(Level + 1))
++ * SkipDatum --> DocSkip,PayloadLength?,FreqSkip,ProxSkip,SkipChildLevelPointer?
++ * DocDelta,Freq,DocSkip,PayloadLength,FreqSkip,ProxSkip --> VInt
++ * SkipChildLevelPointer --> VLong
++ *
++ * details on http://lucene.apache.org/core/3_6_2/fileformats.html#Frequencies
++ */
++class LuceneFrqTable {
++    string db_dir;
++    string file_name;
++    ByteStreamReader stream_reader;
++
++    //this is for a specific term
++    int doc_freq;
++
++  public:
++    LuceneFrqTable(const string &);
++    ~LuceneFrqTable();
++
++    bool set_filename(const string &);
++    const string & get_filename() const;
++    void set_docfreq(const int);
++    const string & get_dbdir() const;
++};
++
++class LucenePostList : public Xapian::Internal::intrusive_base {
++    /** This is equal to ChertPostList::number_of_entries. In other words, It
++     * means how many documents in this postlist
++     */
++    int doc_freq;
++
++    /* Term name for this postlist */
++    string term;
++    int freq_delta;
++    int skip_delta;
++    string db_dir;
++    string file_name;
++    ByteStreamReader docfreq_reader;
++
++    /* Docid of document which is visiting now */
++    Xapian::docid did;
++
++    /* wdf of document which is visiting now */
++    Xapian::termcount wdf;
++
++    /* Count of documents which is visited */
++    int c;
++
++    /** Vector index for LuceneDatabase->seg_dbs, used to find segment. Using
++     * smart ptr of Lucenesegdb instead */
++    unsigned int seg_idx;
++
++    /* Reached the end of postlist */
++    bool is_at_end;
++
++  public:
++    LucenePostList(const string &, int, int, int, const string &,
++                const string &);
++    /* termfreq here means how many document contains the term */
++    Xapian::doccount get_termfreq() const;
++
++    /* virtual function realize begin */
++    Xapian::docid get_docid() const;
++
++    /**TODO, doclength is not exists in Lucene, How to get it?
++     * In Chert, get_doclength() seems return wdf, see the return type,
++     * Xapian::termcount, maybe it's not doclength, it's termcount
++     */
++    Xapian::termcount get_doclength() const;
++
++    /* If reached to the end of the postlist */
++    bool at_end() const;
++
++    /** Visite next document in the PostList, @param is not used yet
++     **/
++    PostList * next(double);
++
++    /** Skip to a specified document in the PostList, @param 2 is not used yet
++     * TODO, skip list is not used yet, so when the length of postlist is big,
++     * performance issues may appear
++     */
++    PostList * skip_to(Xapian::docid, double);
++
++    std::string get_description() const;
++    /* virtual function realize end */
++
++    Xapian::termcount get_wdf() const;
++
++    void set_seg_idx(int idx);
++    unsigned int get_seg_idx() const;
++
++    /* below is for debug */
++    void debug_postlist() const;
++};
++
++/**
++ * Be composed of lots of postlists, one postlist per segment.
++ * All postlits are stored in vector pls
++ * To make interface compatible, this class extends from LeafPostList
++ */
++class LuceneMultiPostList : public LeafPostList {
++    /**
++     * Pointed to database
++     */
++    Xapian::Internal::intrusive_ptr<const LuceneDatabase> this_db;
++
++    /**
++     * one postList per segment
++     */
++    vector<LucenePostList *> pls;
++
++    /**
++     * Current docid which be visited, calculate from sub LucenePostList
++     * It is in segment docid, not external docid
++     */
++    Xapian::docid c_did;
++
++    /* vector index for current postList */
++    unsigned int pls_index;
++
++  public:
++    LuceneMultiPostList(Xapian::Internal::intrusive_ptr<const LuceneDatabase>,
++        const vector<LucenePostList *> &, const string &);
++
++    /* virtual function realize begin */
++    Xapian::doccount get_termfreq() const;
++
++    /**
++     * Return virtual did, not real did, virtual did is a docid
++     * which contains segment index infomation
++     */
++    Xapian::docid get_docid() const;
++
++    Xapian::termcount get_doclength() const;
++
++    /* If visit to the end of PostList */
++    bool at_end() const;
++
++    /* Visit the next doc in pls */
++    PostList * next(double);
++
++    /* Hasn't used yet */
++    PostList * skip_to(Xapian::docid, double);
++    std::string get_description() const;
++
++    /**
++     * Check if ext_id exists in PostList
++     * @a valid is set to true if exists
++     * @a valid is set to false if not exists
++     */
++    //PostList * check(Xapian::docid ext_did, double w_min, bool & valid);
++
++    /* virtual function realize end*/
++
++    /* Called by LeafPostList::get_weight() */
++    Xapian::termcount get_wdf() const;
++
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_segdb.cc b/xapian-core/backends/lucene/lucene_segdb.cc
+new file mode 100644
+index 0000000..71bdb65
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_segdb.cc
+@@ -0,0 +1,137 @@
++
++#include <config.h>
++#include <xapian/error.h>
++#include <xapian/valueiterator.h>
++#include <omassert.h>
++#include "debuglog.h"
++#include <sys/types.h>
++#include "lucene_segdb.h"
++
++using namespace Xapian;
++
++LuceneSegdb::LuceneSegdb(const string & db_dir_, const string & prefix_)
++        : db_dir(db_dir_),
++        prefix(prefix_),
++        index_reader(db_dir),
++        frq_table(db_dir),
++        fdtx_table(db_dir),
++        fnm_table(db_dir)
++{
++    LOGCALL_CTOR(DB, "LuceneSegdb", db_dir_);
++
++    set_filename();
++}
++
++bool
++LuceneSegdb::set_filename() {
++    LOGCALL(DB, bool, "LuceneSegdb::set_filename", NO_ARGS);
++
++    index_reader.set_filename(prefix);
++    frq_table.set_filename(prefix);
++    fdtx_table.set_filename(prefix);
++    fnm_table.set_filename(prefix);
++
++    return true;
++}
++
++bool
++LuceneSegdb::create_and_open_tables() {
++    /* Changing function name to open() is better */
++    index_reader.create_and_open_tables();
++    fdtx_table.open();
++    fnm_table.open();
++
++    return true;
++}
++
++Xapian::doccount
++LuceneSegdb::get_termfreq(const LuceneTerm & lterm) const
++{
++    LOGCALL(DB, Xapian::doccount, "LuceneSegdb::get_termfreq",
++        lterm.get_suffix() | lterm.get_field_num());
++
++    RETURN(index_reader.get_docfreq(lterm));
++}
++
++LucenePostList *
++LuceneSegdb::open_post_list(const LuceneTerm & lterm) const
++{
++    LOGCALL(DB, LucenePostList *, "LuceneSegdb::open_post_list", lterm.get_suffix() |
++                lterm.get_field_num() | prefix);
++
++    LuceneTermInfo term_info;
++    bool b = index_reader.seek(lterm, term_info);
++    if (false == b) {
++        LOGLINE(API, "LuceneDatabase::open_post_list index_reader.seek false");
++        RETURN(NULL);
++    }
++
++    LOGLINE(API, "LuceneDatabase::open_post_list index_reader.seek true");
++    //should return a LucenePostList from frq_table, LucenePostList extends LeafPostList?
++
++    RETURN(new LucenePostList(lterm.get_suffix(), term_info.get_docfreq(),
++                    term_info.get_freqdelta(), term_info.get_skipdelta(),
++                    frq_table.get_dbdir(), frq_table.get_filename()));
++}
++
++void
++LuceneSegdb::get_record(Xapian::docid did, map<int, string> & string_map,
++            map<int, int> & int_map, map<int, long> & long_map,
++            map<int, float> & float_map, map<int, double> & double_map) const {
++    LOGCALL(DB, string, "LuceneSegdb::get_record", did);
++
++    fdtx_table.get_record(did, string_map, int_map, long_map, float_map,
++        double_map);
++}
++
++void
++LuceneSegdb::get_fieldinfo(set<string> & field_info) const {
++    LOGCALL(DB, void, "LuceneSegdb::get_fieldinfo", field_info.size());
++
++    /* .fnm stores field informations */
++    const vector<string> field_name = fnm_table.get_field_name();
++    vector<string>::const_iterator it = field_name.begin();
++    for (; it != field_name.end(); ++it) {
++        field_info.insert(*it);
++    }
++
++    return ;
++}
++
++void
++LuceneSegdb::get_luceneterm(const string & str, LuceneTerm & lterm) const {
++    LOGCALL(DB, void, "LuceneSegdb::get_luceneterm", str);
++
++    /* Query format must fit field_name:term */
++    size_t pos = str.find(":");
++    Assert(pos != string::npos);
++
++    string field = str.substr(0, pos);
++    lterm.set_suffix(str.substr(pos + 1));
++
++    map<string, int>::const_iterator it;
++    it = fnm_table.field_map.find(field);
++
++    /* No match, query string format is wrong, or no related field, abort() */
++    if (it == fnm_table.field_map.end()) {
++        throw Xapian::DatabaseError("LuceneSegdb::get_luceneterm, Query string's"\
++                    "prefix not match .fnm field name");
++    }
++
++    lterm.set_field_num(it->second);
++    LOGLINE(DB, "LuceneSegdb::get_luceneterm, field=" << field <<", name=" <<
++                lterm.get_suffix() << ", fn=" << it->second);
++}
++
++int
++LuceneSegdb::get_fieldnum(const string & field) const {
++    LOGCALL(DB, int, "LuceneSegdb::get_fieldnum", field);
++
++    map<string, int>::const_iterator it = fnm_table.field_map.find(field);
++    if (it == fnm_table.field_map.end()) {
++        throw Xapian::DatabaseError("LuceneSegdb::get_filednum, field is not"\
++                    "match .fnm field name");
++    }
++
++    RETURN(it->second);
++}
+diff --git a/xapian-core/backends/lucene/lucene_segdb.h b/xapian-core/backends/lucene/lucene_segdb.h
+new file mode 100644
+index 0000000..b60150a
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_segdb.h
+@@ -0,0 +1,74 @@
++#ifndef OM_HGUARD_LUCENE_SEGMENT_DATABASE_H
++#define OM_HGUARD_LUCENE_SEGMENT_DATABASE_H
++
++#include "backends/valuestats.h"
++#include "internaltypes.h"
++#include "xapian/intrusive_ptr.h"
++#include "noreturn.h"
++#include "lucene_termindex.h"
++#include "lucene_frqtable.h"
++#include "lucene_fdtxtable.h"
++
++using namespace std;
++
++class LuceneSegdb : public Xapian::Internal::intrusive_base {
++    string db_dir;
++    /* File name prefix, such as _0, _1 */
++    string prefix;
++
++    /* For .tii and .tis */
++    LuceneTermIndex index_reader;
++
++    /* For .frq */
++    LuceneFrqTable frq_table;
++
++    /* For .fdt and .fdx */
++    LuceneFdtxTable fdtx_table;
++
++    /* For .fnm */
++    LuceneFnmTable fnm_table;
++
++  public:
++    LuceneSegdb(const string &, const string &);
++
++    /* Set all tables' name in this segment */
++    bool set_filename();
++
++    /* Open all tables in this segment */
++    bool create_and_open_tables();
++
++    /**
++     * Get termfreq for a term.
++     * Termfreq here means how many document contains this term.
++     * Xapian's termfreq = Lucene's docfreq
++     */
++    Xapian::doccount get_termfreq(const LuceneTerm &) const;
++
++    /* Open a term's postlist */
++    LucenePostList * open_post_list(const LuceneTerm &) const;
++
++    /**
++     * Read document record.
++     * All the @param maps are used to store document records
++     */
++    void get_record(Xapian::docid, map<int, string> &, map<int, int> &,
++        map<int, long> &, map<int, float> &, map<int, double> &) const;
++
++    /* get field name in this segment */
++    void get_fieldinfo(set<string> & field_info) const;
++
++    /** Construct LuceneTerm from query string.
++     * Now, Lucene query string must fit this format, field_name:term.
++     * For example, user_name:white, this query means I want to seach
++     * 'white' in field 'user_name'
++     *
++     * Actually, this function is used to parse the query, change field
++     * name to field number
++     */
++    void get_luceneterm(const string & str, LuceneTerm & lterm) const;
++
++    /* Find the field number related to @param field */
++    int get_fieldnum(const string & field) const;
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_segmentgentable.cc b/xapian-core/backends/lucene/lucene_segmentgentable.cc
+new file mode 100644
+index 0000000..2c83924
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_segmentgentable.cc
+@@ -0,0 +1,50 @@
++
++#include "debuglog.h"
++#include <iostream>
++
++#include "lucene_segmentgentable.h"
++
++LuceneSegmentGenTable::LuceneSegmentGenTable(const string & db_dir_)
++        : db_dir(db_dir_),
++          file_name("segments.gen"),
++          stream_reader(db_dir, file_name)
++{
++    LOGCALL_CTOR(DB, "LuceneSegmentGenTable", db_dir);
++}
++
++bool 
++LuceneSegmentGenTable::open() {
++    cout << "LuceneSegmentGenTable::open" << endl;
++
++    stream_reader.open_stream();
++
++    stream_reader.read_int32(version);
++    cout << "LuceneSegmentGenTable::open, generationA:" << generationA << endl; 
++    stream_reader.read_int64(generationA);
++    stream_reader.read_int64(generationB);
++
++    return true;
++}
++
++int
++LuceneSegmentGenTable::get_version() {
++    return version;
++}
++
++long long
++LuceneSegmentGenTable::get_generationA() {
++    return generationA;
++}
++
++long long
++LuceneSegmentGenTable::get_generationB() {
++    return generationB;
++}
++
++//It's for debug below
++void LuceneSegmentGenTable::debug_get_table() {
++    cout << "LuceneSegmentGenTable::debgu_get_table" << endl;
++    cout << "segments.gen-->version(" << version << "), generationA(" 
++        << generationA << "),generationB(" << generationB << ")";
++    cout << endl;
++}
+diff --git a/xapian-core/backends/lucene/lucene_segmentgentable.h b/xapian-core/backends/lucene/lucene_segmentgentable.h
+new file mode 100644
+index 0000000..88c1377
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_segmentgentable.h
+@@ -0,0 +1,31 @@
++
++#ifndef XAPIAN_INCLUDED_LUCENE_SEGMENTGENTABLE_H
++#define XAPIAN_INCLUDED_LUCENE_SEGMENTGENTABLE_H
++
++#include "bytestream.h"
++
++class LuceneSegmentPart;
++
++class LuceneSegmentGenTable {
++    string db_dir;
++    string file_name;
++    ByteStreamReader stream_reader;
++
++    //segment_gen 's data
++    int version;
++    long long generationA;
++    long long generationB;
++
++  public:
++    LuceneSegmentGenTable(const string &);
++    bool open();
++
++    int get_version();
++    long long get_generationA();
++    long long get_generationB();
++
++    //for debug
++    void debug_get_table();
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_segmenttable.cc b/xapian-core/backends/lucene/lucene_segmenttable.cc
+new file mode 100644
+index 0000000..63b3dbc
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_segmenttable.cc
+@@ -0,0 +1,154 @@
++
++#include "debuglog.h"
++#include "common/omassert.h"
++#include <iostream>
++#include <sstream>
++
++#include "lucene_segmenttable.h"
++
++LuceneSegmentTable::LuceneSegmentTable(const string &db_dir_)
++        : db_dir(db_dir_),
++        stream_reader(db_dir)
++{
++    LOGCALL_CTOR(DB, "LuceneSegmentTable", db_dir);
++    file_name = "";
++}
++
++bool 
++LuceneSegmentTable::open() {
++    cout << "LuceneSegmentTable::open" << endl;
++    LOGCALL(DB, bool, "LuceneSegmentTable::open", NO_ARGS);
++
++    stream_reader.open_stream();
++
++    format = stream_reader.read_int32();
++    version = stream_reader.read_int64();
++    name_counter = stream_reader.read_int32();
++    seg_count = stream_reader.read_int32();
++    segment_part = new LuceneSegmentPart[seg_count];
++
++    for (int i = 0; i < seg_count; ++i) {
++        LuceneSegmentPart &sp = segment_part[i];
++        stream_reader.read_string(sp.seg_version);
++        stream_reader.read_string(sp.seg_name);
++        stream_reader.read_int32(sp.seg_size);
++        stream_reader.read_int64(sp.del_gen);
++        stream_reader.read_int32(sp.doc_store_offset);
++        if (-1 != sp.doc_store_offset) {
++            //TODO read DocStoreSegment and DocStoreIsCompoundFile
++        }
++        stream_reader.read_byte(sp.has_single_normfile);
++        stream_reader.read_int32(sp.num_field);
++        if (-1 != sp.num_field) {
++            //TODO read NormGen^Numfield
++        }
++        stream_reader.read_byte(sp.is_compoundfile);
++        stream_reader.read_int32(sp.del_count);
++        stream_reader.read_byte(sp.has_proxy);
++        stream_reader.read_ssmap(sp.diagnostics);
++        stream_reader.read_byte(sp.has_vectors);
++    }
++
++    stream_reader.read_ssmap(commit_user_data);
++    stream_reader.read_int64(checksum);
++
++    return true;
++}
++
++int LuceneSegmentTable::get_seg_count() {
++    return seg_count;
++}
++
++/**
++ * 这里计算的是所有segment的文档总和
++ */
++Xapian::doccount LuceneSegmentTable::get_doccount() const {
++    LOGCALL(DB, bool, "LuceneSegmentTable::get_doccount", NO_ARGS);
++    Xapian::doccount count = 0;
++    for (int i = 0; i < seg_count; ++i) {
++        LuceneSegmentPart &sp = segment_part[i];
++        count += sp.seg_size;
++    }
++
++    RETURN(count);
++}
++
++bool LuceneSegmentTable::set_filename(long long file_suffix) {
++    ostringstream ss;
++    ss << file_suffix;
++    string suffix = ss.str();
++
++    file_name = "segments_" + suffix;
++    stream_reader.set_filename(file_name);
++
++    return true;
++}
++
++string LuceneSegmentTable::get_seg_name(int part_num) {
++    LuceneSegmentPart & sp = segment_part[part_num];
++    return sp.seg_name;
++}
++
++Xapian::docid
++LuceneSegmentTable::get_didbase(int seg_idx) const {
++    Assert(seg_idx < seg_count);
++
++    Xapian::docid base = 0;
++    for (int i = 0; i < seg_idx; ++i) {
++        base += segment_part[i].seg_size;
++    }
++
++    return base;
++}
++
++Xapian::docid
++LuceneSegmentTable::get_didbase_and_segidx(Xapian::docid ext_did,
++    unsigned int & seg_idx) const {
++
++    Xapian::docid base = 0;
++    int size = 0;
++    int i = 0;
++    for (; i < seg_count; ++i) {
++        size = segment_part[i].seg_size;
++        if (size + base >= ext_did) {
++            break;
++        }
++
++        base += size;
++    }
++
++    seg_idx = i;
++
++    return base;
++}
++
++//It's for debug below
++void LuceneSegmentTable::debug_get_table() {
++    cout << "segments->Format(" << format << "),Version(" << version << "),NameCounter("
++        << name_counter << "),SegCount(" << seg_count << "), <";
++    for (int i = 0; i < seg_count; ++i) {
++        LuceneSegmentPart & sp = segment_part[i];
++        cout << "segName(" << sp.seg_name << "),SegSize(" << sp.seg_size << "),DelGen("
++            << sp.del_gen << "),DocStoreOffset(" << sp.doc_store_offset << "),";
++        if (-1 != sp.doc_store_offset) {
++        }
++        cout << "HasSingleNormFile(" << sp.has_single_normfile << "),Numfield(" << sp.num_field
++            << "),";
++        if (-1 != sp.num_field) {
++        }
++        cout << "IsCompoundFile(" << sp.is_compoundfile << "),DeletionCount(" << sp.del_count
++            << "),HasProxy(" << sp.has_proxy << "),Diagnostics("; 
++        map<string, string>::iterator it = sp.diagnostics.begin();
++        for (;it != sp.diagnostics.end(); ++it) {
++            cout << "[" << it->first << "," << it->second << "],";
++        }
++        cout << ")";
++    }
++    cout << ">,commit_user_data(";
++    map<string, string>::iterator it = commit_user_data.begin();
++    for (; it != commit_user_data.end(); ++it) {
++        cout << "[" << it->first << "," << it->second << "],";
++    }
++    cout << "),CheckSum(" << checksum << ")";
++    cout << endl;
++}
+diff --git a/xapian-core/backends/lucene/lucene_segmenttable.h b/xapian-core/backends/lucene/lucene_segmenttable.h
+new file mode 100644
+index 0000000..7f76c9e
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_segmenttable.h
+@@ -0,0 +1,65 @@
++
++#ifndef XAPIAN_INCLUDED_LUCENE_SEGMENTTABLE_H
++#define XAPIAN_INCLUDED_LUCENE_SEGMENTTABLE_H
++
++#include "bytestream.h"
++
++class LuceneSegmentPart;
++
++class LuceneSegmentTable {
++    string db_dir;
++    string file_name;
++    ByteStreamReader stream_reader;
++
++    //segment_gen 's data
++    int format;
++    long long version;
++    int name_counter;
++    int seg_count;
++    //using vector instead
++    LuceneSegmentPart * segment_part;
++    map<string, string> commit_user_data;
++    long long checksum;
++
++  public:
++    LuceneSegmentTable(const string &);
++    bool open();
++    bool set_filename(long long file_suffix);
++    string get_seg_name(int part_num);
++
++    int get_seg_count();
++    Xapian::doccount get_doccount() const;
++    /**
++     * Get docid base for segment[seg_idx]
++     */
++    Xapian::docid get_didbase(int seg_idx) const;
++
++    /**
++     * Get segment docid and segment index
++     */
++    Xapian::docid get_didbase_and_segidx(Xapian::docid ext_did,
++                unsigned int & seg_idx) const;
++
++    //for debug
++    void debug_get_table();
++};
++
++class LuceneSegmentPart {
++    friend class LuceneSegmentTable;
++    string seg_version;
++    string seg_name;
++    int seg_size;
++    long long del_gen;
++    int doc_store_offset;
++    char has_single_normfile;
++    int num_field;
++    char is_compoundfile;
++    int del_count;
++    char has_proxy;
++    map<string, string> diagnostics;
++    char has_vectors;
++
++  public:
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_term.cc b/xapian-core/backends/lucene/lucene_term.cc
+new file mode 100644
+index 0000000..a43f84c
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_term.cc
+@@ -0,0 +1,90 @@
++
++#include "lucene_term.h"
++#include <iostream>
++
++using namespace std;
++
++LuceneTerm::LuceneTerm() {
++    prefix_length = 0;
++    suffix = "";
++    field_num = -1;
++}
++
++int
++LuceneTerm::compare(const LuceneTerm & term) const {
++    if (field_num == term.field_num) {
++        return suffix.compare(term.suffix);
++    }
++
++    if (field_num > term.field_num) {
++        return 1;
++    } else {
++        return -1;
++    }
++}
++
++string
++LuceneTerm::get_suffix() const {
++    return suffix;
++}
++
++int
++LuceneTerm::get_field_num() const {
++    return field_num;
++}
++
++int
++LuceneTermInfo::get_docfreq() const {
++    return doc_freq;
++}
++
++int
++LuceneTermInfo::get_freqdelta() const {
++    return freq_delta;
++}
++
++int
++LuceneTermInfo::get_proxdelta() const {
++    return prox_delta;
++}
++
++int
++LuceneTermInfo::get_skipdelta() const {
++    return skip_delta;
++}
++
++
++/**
++ * below is for debug
++ */
++void
++LuceneTerm::set_field_num(int field_num_) {
++    field_num = field_num_;
++}
++
++void
++LuceneTerm::set_suffix(const string &text) {
++    suffix = text;
++}
++
++void
++LuceneTermInfo::debug_term_info() const {
++    const LuceneTerm & t = term;
++
++    cout << "LuceneTermInfo-->doc_freq[" << doc_freq << "],freq_delta[" <<
++        freq_delta << "],prox_delta[" << prox_delta << "],skip_delta[" <<
++        skip_delta << "],suffix[" << t.suffix << "],field_num[" <<
++        t.field_num << "]" << endl;
++}
++
++void
++LuceneTermIndice::debug_term_indice() const {
++    const LuceneTermInfo & ti = terminfo;
++    const LuceneTerm & t = ti.term;
++
++    cout << "LuceneTermIndice-->doc_freq[" << ti.doc_freq << "],freq_delta[" <<
++        ti.freq_delta << "],prox_delta[" << ti.prox_delta << "], skip_delta[" <<                                                  
++        ti.skip_delta << "],suffix[" << t.suffix << "],field_num[" <<   
++        t.field_num << "],index_delta[" << index_delta << "]" << endl;
++}
++
+diff --git a/xapian-core/backends/lucene/lucene_term.h b/xapian-core/backends/lucene/lucene_term.h
+new file mode 100644
+index 0000000..6361fb1
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_term.h
+@@ -0,0 +1,128 @@
++
++#ifndef XAPIAN_INCLUDED_LUCENE_TERM_H
++#define XAPIAN_INCLUDED_LUCENE_TERM_H
++
++#include <string>
++
++using namespace std;
++
++/**
++ * Lucene Term, include three properties,
++ * 1. Prefix length
++ * 2. Term suffix
++ * 3. Field number which the term belongs to
++ *
++ * See details on http://lucene.apache.org/core/3_6_2/fileformats.html
++ */
++class LuceneTerm {
++    friend class ByteStreamReader;
++    friend class LuceneTermInfo;
++    friend class LuceneTiiTable;
++    friend class LuceneTisTable;
++
++    /* begin this line is for debug */
++    friend class LuceneTermIndice;
++    /* end this line is for debug */
++
++    /**
++     * Term prefix length, more details http://lucene.apache.org/core/3_6_2/fileformats.html
++     * Lucene writes strings as UTF-8 encoded bytes. First the length, in bytes,
++     * is written as a VInt, followed by the bytes.
++     * string --> VInt, Chars
++     **/
++    int prefix_length;
++
++    /**
++     * Term content, sometimes it's term suffix, but other time it's the whole term content,
++     * so the name 'suffix' is not quit suitable here, FIXME
++     */
++    string suffix;
++
++    /**
++     * Lucene Term has two properties, @1 is term name, @2 is field number
++     */
++    int field_num;
++
++  public:
++    LuceneTerm();
++
++    /**
++     * Term compare, using term name(suffix) and field number(field_num)
++     */
++    int compare(const LuceneTerm &) const;
++
++    /* Return suffix */
++    string get_suffix() const;
++
++    /* Return field_num */
++    int get_field_num() const;
++
++    //just for debug
++    void set_field_num(int);
++
++    /* Set suffix */
++    void set_suffix(const string &);
++};
++
++/**
++ * More information about one Lucene term.
++ *
++ * See details on http://lucene.apache.org/core/3_6_2/fileformats.html
++ */
++class LuceneTermInfo {
++    friend class ByteStreamReader;
++    friend class LuceneTermIndice;
++    friend class LuceneTiiTable;
++    friend class LuceneTisTable;
++
++    /* Lucene term */
++    LuceneTerm term;
++
++    /* Document frequency. It means how many document contains this term */
++    int doc_freq;
++
++    /**
++     * File offset in .frq file, which contains the list of docs of this term
++     * along with frequency(within document frequency, wdf)
++     * Relative position or absolute position?
++     **/
++    int freq_delta;
++
++    /**
++     * File offset in .prx file, which stores position information about where
++     * this term occurs in the index
++     */
++    int prox_delta;
++
++    /**
++     *
++     */
++    int skip_delta;
++
++  public:
++    int get_docfreq() const;
++    int get_freqdelta() const;
++    int get_proxdelta() const;
++    int get_skipdelta() const;
++
++    /**
++     * below is for debug
++     */
++    void debug_term_info() const;
++};
++
++class LuceneTermIndice {
++    friend class LuceneTiiTable;
++    friend class LuceneTisTable;
++
++    LuceneTermInfo terminfo;
++    long long index_delta;
++
++    /**
++     * below is for debug
++     */
++  public:
++    void debug_term_indice() const;
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_termindex.cc b/xapian-core/backends/lucene/lucene_termindex.cc
+new file mode 100644
+index 0000000..b653262
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_termindex.cc
+@@ -0,0 +1,85 @@
++
++#include "lucene_termindex.h"
++//must include this file to use LOGCALL()
++#include "config.h"
++#include "debuglog.h"
++
++#include <iostream>
++
++/**
++ * below include is for debug
++ */
++#include <cstdlib>
++
++using namespace std;
++
++LuceneTermIndex::LuceneTermIndex(const string & db_dir_)
++        : tii_table(db_dir_),
++        fnm_table(db_dir_),
++        tis_table(db_dir_)
++{
++}
++
++bool
++LuceneTermIndex::set_filename(string prefix) {
++    tii_table.set_filename(prefix);
++    fnm_table.set_filename(prefix);
++    tis_table.set_filename(prefix);
++
++    return true;
++}
++
++bool
++LuceneTermIndex::create_and_open_tables() {
++    tii_table.open();
++    tii_table.debug_table();
++    fnm_table.open();
++    vector<string> field_name = fnm_table.get_field_name();
++    tii_table.set_field_name(field_name);
++    //TODO
++    tis_table.open();
++    tis_table.set_field_name(field_name);
++
++    //for debug
++    tis_table.debug_get_table();
++
++    return true;
++}
++
++bool
++LuceneTermIndex::seek(const LuceneTerm & lterm, LuceneTermInfo & result) const {
++    /** .tii seems a skip list for .tis, the whole list in .tii is read in memery.
++     * Here using binary search to find the index for more information
++     * in .tis
++     */
++    int idx = tii_table.get_index_offset(lterm);
++
++    /* Here suffix really means the whole term name */
++    LOGCALL(API, bool, "LuceneTermIndex::seek", lterm.get_suffix());
++
++    cout << "LuceneTermIndex::seek, idx=" << idx << endl;
++    const LuceneTermIndice & term_indice = tii_table.get_term_indice(idx);
++    term_indice.debug_term_indice();
++
++    /** Firstly, fseek to the right place in .tis. Secondly, do a sequence search
++     * to find the term.
++     * FIXME, skip list supported in .tis, but not used yet here
++     */
++    bool b = tis_table.scan_to(lterm, result, term_indice);
++
++    RETURN(b);
++}
++
++int
++LuceneTermIndex::get_docfreq(const LuceneTerm & lterm) const {
++    LOGCALL(API, int, "LuceneTermIndex::get_docfreq", lterm.get_suffix());
++
++    //FIXME, search directly every time
++    LuceneTermInfo terminfo;
++    if (false == seek(lterm, terminfo)) {
++        return 0;
++    }
++
++    RETURN(terminfo.get_docfreq());
++}
++
+diff --git a/xapian-core/backends/lucene/lucene_termindex.h b/xapian-core/backends/lucene/lucene_termindex.h
+new file mode 100644
+index 0000000..97e8c2b
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_termindex.h
+@@ -0,0 +1,43 @@
++
++#ifndef XAPIAN_INCLUDED_LUCENE_TERMINDEX_H
++#define XAPIAN_INCLUDED_LUCENE_TERMINDEX_H
++
++#include "lucene_tiitable.h"
++#include "lucene_fnmtable.h"
++#include "lucene_tistable.h"
++//must include this file to use LOGCALL()
++#include "config.h"
++#include "bytestream.h"
++
++class LuceneTermIndex {
++    LuceneTiiTable tii_table;
++    //Maybe need to move it to LuceneSegdb
++    LuceneFnmTable fnm_table;
++    LuceneTisTable tis_table;
++
++    //not support multithread now
++    /*
++    LuceneTermInfo cursor_terminfo;
++    //has searched before, if true, cursor_terminfo points 
++    //to the searched terminfo
++    bool started;
++    */
++
++  public:
++    LuceneTermIndex(const string &);
++
++    /* Open .tii/.fnm/.tis tables */
++    bool create_and_open_tables();
++    bool set_filename(string prefix);
++
++    /* Search @target, the result info is stored in @result */
++    bool seek(const LuceneTerm & target, LuceneTermInfo & result) const;
++
++    /* This is equal to postlist_table.get_termfreq(), Xapian's termfreq = Lucene's docfreq */
++    int get_docfreq(const LuceneTerm & lterm) const;
++
++    //test
++    bool test(const string &) const;
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_tiitable.cc b/xapian-core/backends/lucene/lucene_tiitable.cc
+new file mode 100644
+index 0000000..d99fb1d
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_tiitable.cc
+@@ -0,0 +1,157 @@
++
++#include "config.h"
++#include "debuglog.h"
++
++#include "lucene_tiitable.h"
++#include <iostream>
++
++using namespace std;
++
++LuceneTiiTable::LuceneTiiTable(const string & db_dir_)
++        : db_dir(db_dir_),
++        stream_reader(db_dir)
++{
++    LOGCALL_CTOR(DB, "LuceneTiiTable", db_dir);
++    file_name = "";
++}
++
++bool
++LuceneTiiTable::set_filename(const string & prefix) {
++    /* Has fixed suffix name '.tii' */
++    file_name = prefix + ".tii";
++    stream_reader.set_filename(file_name);
++
++    return true;
++}
++
++/** TermInfoIndex (.tii)--> TIVersion, IndexTermCount, IndexInterval, SkipInterval, MaxSkipLevels, TermIndices
++ * TIVersion --> UInt32
++ * IndexTermCount --> UInt64
++ * IndexInterval --> UInt32
++ * SkipInterval --> UInt32
++ * TermIndices --> <TermInfo, IndexDelta> IndexTermCount
++ * IndexDelta --> VLong
++ *
++ * More details on http://lucene.apache.org/core/3_6_2/fileformats.html#tii
++ */
++bool
++LuceneTiiTable::open() {
++    LOGCALL(DB, bool, "LuceneTiiTable::open", NO_ARGS);
++
++    stream_reader.open_stream();
++
++    /* Just a version number */
++    stream_reader.read_uint32(ti_version);
++
++    /* How many terms in .tii file */
++    stream_reader.read_uint64(index_term_count);
++    stream_reader.read_uint32(index_interval);
++
++    /** SkipInterval is the fraction of TermDocs stored in skip tables. It is 
++     * used to accelerate TermDocs.skipTo(int). Larger values result in smaller
++     * indexes, greater acceleration, but fewer accelerable cases, while smaller
++     * values result in bigger indexes, less acceleration (in case of a small
++     * value for MaxSkipLevels) and more accelerable cases.
++     */
++    stream_reader.read_uint32(skip_interval);
++
++    /** MaxSkipLevels is the max. number of skip levels stored for each term in
++     * the .frq file. A low value results in smaller indexes but less acceleration,
++     * a larger value results in slighly larger indexes but greater acceleration.
++     * See format of .frq file for more information about skip levels.
++     */
++    stream_reader.read_uint32(max_skip_levels);
++
++    //FIXME this code looks bad
++    LuceneTerm p_term;
++    long long p_index_delta = 0;
++    int p_freq_delta = 0;
++    LuceneTermIndice indice;
++    for (unsigned long long i = 0; i < index_term_count; ++i) {
++        stream_reader.read_terminfo(indice.terminfo, skip_interval);
++        stream_reader.read_vint64(indice.index_delta);
++        /* Caculate indice.index_delta, index_delta is not absolute data */
++        indice.index_delta += p_index_delta;
++
++        /* So do freq_delta, it's not absolute data */
++        indice.terminfo.freq_delta += p_freq_delta;
++
++        /** Change prefix string to unprefix string, in order to binary search in memery.
++         * So here, term.suffix means the whole string, not suffix
++         * */
++        LuceneTerm & c_term = indice.terminfo.term;
++        int pl = c_term.prefix_length;
++        /* Has prefix, concate string */
++        if (pl >= 0) {
++            string & prev_string = p_term.suffix;
++            string prefix = prev_string.substr(0, pl);
++            c_term.suffix = prefix + c_term.suffix;
++        }
++        term_indices.push_back(indice);
++
++        p_term = c_term;
++        p_index_delta = indice.index_delta;
++        p_freq_delta = indice.terminfo.freq_delta;
++    }
++
++    return true;
++}
++
++bool
++LuceneTiiTable::set_field_name(vector<string> field_name_) {
++    field_name = field_name_;
++
++    return true;
++}
++
++/* The whole list in .tii is read in memery, so do binary search */
++int
++LuceneTiiTable::get_index_offset(const LuceneTerm & term) const {
++    LOGCALL(API, int, "LuceneTiiTable::get_index_offset", term.suffix);
++
++    //Binary search
++    int lo = 0;
++    int hi = term_indices.size();
++    int mid = 0;
++    int delta = 0;
++    while (hi >= lo) {
++        mid = (lo + hi) >> 1;
++        const LuceneTerm & t = term_indices[mid].terminfo.term;
++        delta = term.compare(t);
++        if (delta < 0)
++          hi = mid - 1;
++        else if (delta > 0)
++          lo = mid + 1;
++        else
++          return mid;
++    }
++
++    return hi;
++}
++
++const LuceneTermIndice &
++LuceneTiiTable::get_term_indice(int idx) const {
++    return term_indices[idx];
++}
++
++//below for debug
++void
++LuceneTiiTable::debug_table() {
++    cout << file_name << ".tii table-->" << "TIVersion(" << ti_version << "),IndexTermCount:(" <<
++        index_term_count << "),IndexInterval:(" << index_interval << 
++        "),SkipInterval(" << skip_interval << "),MaxSkipLevels(" <<
++        max_skip_levels << "),TermIndices:<" << endl;
++
++    vector<LuceneTermIndice>::iterator it = term_indices.begin();
++    for (; it != term_indices.end(); ++it) {
++        LuceneTermInfo & ti = (*it).terminfo;
++        LuceneTerm & t = ti.term;
++        cout << "Term[PrefixLength(" << t.prefix_length << "),suffix(" <<
++            t.suffix << "),FieldNum(" << t.field_num << "],DocFreq(" <<
++            ti.doc_freq << "),FreqDelta(" << ti.freq_delta << "),ProxDelta(" <<
++            ti.prox_delta << "),SkipDelta(" << ti.skip_delta << "],IndexDelta(" <<
++            (*it).index_delta << ")" << endl;
++    }
++
++    return ;
++}
+diff --git a/xapian-core/backends/lucene/lucene_tiitable.h b/xapian-core/backends/lucene/lucene_tiitable.h
+new file mode 100644
+index 0000000..090cbd4
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_tiitable.h
+@@ -0,0 +1,35 @@
++
++#ifndef XAPIAN_INCLUDED_LUCENE_TIITABLE_H
++#define XAPIAN_INCLUDED_LUCENE_TIITABLE_H
++
++#include "bytestream.h"
++
++/**
++ * Read the whole .tii file into memery
++ */
++class LuceneTiiTable {
++    string db_dir;
++    string file_name;
++
++    unsigned int ti_version;
++    unsigned long long index_term_count;
++    unsigned int index_interval;
++    unsigned int skip_interval;
++    unsigned int max_skip_levels;
++    vector<LuceneTermIndice> term_indices;
++    vector<string> field_name;
++    ByteStreamReader stream_reader;
++
++  public:
++    LuceneTiiTable(const string &);
++    bool set_filename(const string &);
++    bool open();
++    bool set_field_name(vector<string>);
++    int get_index_offset(const LuceneTerm &) const;
++    const LuceneTermIndice & get_term_indice(int) const;
++
++    //for dubug
++    void debug_table();
++};
++
++#endif
+diff --git a/xapian-core/backends/lucene/lucene_tistable.cc b/xapian-core/backends/lucene/lucene_tistable.cc
+new file mode 100644
+index 0000000..8490aba
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_tistable.cc
+@@ -0,0 +1,111 @@
++
++#include "lucene_tistable.h"
++#include "debuglog.h"
++#include <iostream>
++
++/**
++ * below include is for debug
++ */
++#include <cstdlib>
++
++using namespace std;
++
++LuceneTisTable::LuceneTisTable(const string & db_dir_)
++        : db_dir(db_dir_),
++        stream_reader(db_dir_)
++{
++}
++
++bool
++LuceneTisTable::set_filename(const string & prefix) {
++    /* Has fixed file name suffix '.tis' */
++    file_name = prefix + ".tis";
++    stream_reader.set_filename(file_name);
++
++    return true;
++}
++
++bool
++LuceneTisTable::set_field_name(vector<string> field_name_) {
++    field_name = field_name_;
++
++    return true;
++}
++
++bool
++LuceneTisTable::open() {
++    cout << "LuceneTisTable::open"  << endl;
++
++    stream_reader.open_stream();
++
++    stream_reader.read_int32(ti_version);
++    cout << "LuceneTisTable::open ti_version:" << ti_version << endl;
++    stream_reader.read_int64(term_count);
++    cout << "LuceneTisTable::open term_count:" << term_count << endl;
++    stream_reader.read_int32(index_interval);
++    cout << "LuceneTisTable::open index_interval:" << index_interval << endl;
++    stream_reader.read_int32(skip_interval);
++    cout << "LuceneTisTable::open skip_interval:" << skip_interval << endl;
++    stream_reader.read_int32(max_skip_levels);
++    cout << "LuceneTisTable::open max_skip_levels:" << max_skip_levels << endl;
++
++    return true;
++}
++
++bool
++LuceneTisTable::scan_to(const LuceneTerm & target, LuceneTermInfo & result,
++            const LuceneTermIndice & prev) const {
++    LOGCALL(API, bool, "LuceneTisTable::scan_to", target.suffix);
++    LuceneTermInfo c;
++    LuceneTermInfo p = prev.terminfo;
++    stream_reader.seek_to(prev.index_delta);
++
++    /** freq_delta in for loop is offset based on p_freq_delta, it's not absolute
++     * data
++     */
++    int p_freq_delta = prev.terminfo.freq_delta;
++
++    cout << "get_ftell=" << stream_reader.get_ftell() << 
++        ", skip_interval=" << skip_interval << 
++        ", index_interval=" << index_interval << endl;
++    for (int i = 0; i < index_interval; ++i) {
++        stream_reader.read_terminfo(c, skip_interval);
++
++        /** c.freq_delta is offset based on p_freq_delta, it's the file offset int
++         * .frq
++         */
++        c.freq_delta += p_freq_delta;
++        p_freq_delta = c.freq_delta;
++
++        LuceneTerm & t = c.term;
++        //FIXME this code looks bad
++        /* has prefix, concat it */
++        if (0 != t.prefix_length) {
++            string prefix = p.term.suffix.substr(0, t.prefix_length);
++            t.suffix = prefix + t.suffix;
++        }
++        
++        //c.debug_term_info();
++
++        int r = target.compare(t);
++        //find it
++        if (0 == r) {
++            result = c;
++            RETURN(true);
++        }
++
++        p = c;
++    }
++
++    RETURN(false);
++}
++
++/**
++ * below is for debug
++ */
++void
++LuceneTisTable::debug_get_table() {
++    cout << "tis-->TIVersion[" << ti_version << "],TermCount[" << 
++        term_count << "],SkipInterval[" << skip_interval << "],MaxSkipInterval[" <<
++        max_skip_levels << "]" << endl;
++}
+diff --git a/xapian-core/backends/lucene/lucene_tistable.h b/xapian-core/backends/lucene/lucene_tistable.h
+new file mode 100644
+index 0000000..f767f67
+--- /dev/null
++++ b/xapian-core/backends/lucene/lucene_tistable.h
+@@ -0,0 +1,38 @@
++
++#ifndef XAPIAN_INCLUDED_LUCENE_TISTABLE_H
++#define XAPIAN_INCLUDED_LUCENE_TISTABLE_H
++
++#include "config.h"
++#include "bytestream.h"
++
++class LuceneTisTable {
++    string db_dir;
++    string file_name;
++
++    vector<string> field_name;
++    int ti_version;
++    long long term_count;
++    int index_interval;
++    int skip_interval;
++    int max_skip_levels;
++    ByteStreamReader stream_reader;
++
++  public:
++    LuceneTisTable(const string &);
++    bool set_filename(const string & prefix);
++    bool set_field_name(vector<string>);
++    bool open();
++    /**
++     * LuceneTerm &, target
++     * LuceneTermInfo &, result 
++     * const LuceneTermInfo &, prev term info in tii
++     * const long long &, file offset in tis
++     */
++    bool scan_to(const LuceneTerm &, LuceneTermInfo &, 
++                const LuceneTermIndice &) const;
++
++    //below is for debug
++    void debug_get_table();
++};
++
++#endif
+diff --git a/xapian-core/common/debuglog.cc b/xapian-core/common/debuglog.cc
+index 8a99014..ba8cacf 100644
+--- a/xapian-core/common/debuglog.cc
++++ b/xapian-core/common/debuglog.cc
+@@ -60,7 +60,7 @@ DebugLogger::initialise_categories_mask()
+     if (f && *f) {
+ 	if (f[0] == '-' && f[1] == '\0') {
+ 	    // Filename "-" means "log to stderr".
+-	    fd = 2;
++	    fd = 1;
+ 	} else {
+ 	    string fnm, pid;
+ 	    while (*f) {
+@@ -80,7 +80,7 @@ DebugLogger::initialise_categories_mask()
+ 		// don't spew all the log output to stderr too or else the
+ 		// user will probably miss the message about the debug log
+ 		// failing to open!
+-		fd = 2;
++		fd = 1;
+ 		LOGLINE(ALWAYS, PACKAGE_STRING": Failed to open debug log '"
+ 			<< fnm << "' (" << strerror(errno) << ')');
+ 		fd = -2;
+diff --git a/xapian-core/configure.ac b/xapian-core/configure.ac
+index 2c5d3c8..22da826 100644
+--- a/xapian-core/configure.ac
++++ b/xapian-core/configure.ac
+@@ -670,6 +670,7 @@ XAPIAN_BACKEND_ENABLE(brass)
+ XAPIAN_BACKEND_ENABLE(chert)
+ XAPIAN_BACKEND_ENABLE(inmemory)
+ XAPIAN_BACKEND_ENABLE(remote)
++XAPIAN_BACKEND_ENABLE(lucene)
+ 
+ use_win32_uuid_api=0
+ case $enable_backend_chert$enable_backend_brass in
+@@ -842,6 +843,7 @@ AM_CONDITIONAL(BUILD_BACKEND_BRASS, test yes = "$enable_backend_brass")
+ AM_CONDITIONAL(BUILD_BACKEND_CHERT, test yes = "$enable_backend_chert")
+ AM_CONDITIONAL(BUILD_BACKEND_INMEMORY, test yes = "$enable_backend_inmemory")
+ AM_CONDITIONAL(BUILD_BACKEND_REMOTE, test yes = "$enable_backend_remote")
++AM_CONDITIONAL(BUILD_BACKEND_LUCENE, test yes = "$enable_backend_lucene")
+ AM_CONDITIONAL(BUILD_BACKEND_BRASS_OR_CHERT,
+   [test nono != "$enable_backend_brass$enable_backend_chert"])
+ 
+@@ -1255,7 +1257,7 @@ dnl Generate include/xapian/version.h:
+ dnl MAIN_VERSION is VERSION without any _svn6789 suffix.
+ MAIN_VERSION="$MAJOR_VERSION.$MINOR_VERSION.$REVISION"
+ cxxcpp_flags=-I.
+-for backend in BRASS CHERT INMEMORY REMOTE ; do
++for backend in BRASS CHERT INMEMORY REMOTE LUCENE; do
+   val=`eval echo "\\\$BUILD_BACKEND_${backend}_TRUE"`
+   if test -z "$val" ; then
+     cxxcpp_flags="$cxxcpp_flags -DXAPIAN_HAS_${backend}_BACKEND"
+diff --git a/xapian-core/examples/quest.cc b/xapian-core/examples/quest.cc
+index b3875b4..2c25aa4 100644
+--- a/xapian-core/examples/quest.cc
++++ b/xapian-core/examples/quest.cc
+@@ -208,13 +208,19 @@ try {
+     }
+ 
+     parser.set_database(db);
++    //add_prefix fieldprocessor for lucene, set_database() must called before
++    parser.set_fieldproc();
++
+     parser.set_default_op(Xapian::Query::OP_OR);
+-    parser.set_stemmer(stemmer);
++    //parser.set_stemmer(stemmer);
+     parser.set_stemming_strategy(Xapian::QueryParser::STEM_SOME);
+     parser.set_stopper(&mystopper);
+ 
++    cout << "argv[optind]=" << argv[optind] << endl;
+     Xapian::Query query = parser.parse_query(argv[optind], flags);
++    cout << "parser.parse_query end" << endl;
+     const string & correction = parser.get_corrected_query_string();
++    cout << "quest.cc, correction=" << correction << endl;
+     if (!correction.empty())
+ 	cout << "Did you mean: " << correction << "\n\n";
+ 
+@@ -232,8 +238,12 @@ try {
+ 
+     cout << "MSet:" << endl;
+     for (Xapian::MSetIterator i = mset.begin(); i != mset.end(); i++) {
++    //Should return all field data, and choose which field data needed 
++    //Like, doc.get_data("data"), which "data" is field name
++    //When opening Document, all data should read in, and get_data() just
+ 	Xapian::Document doc = i.get_document();
+-	string data = doc.get_data();
++	//string data = doc.get_data(); /* Original method */
++    string data = doc.get_data_string("dataorigin"); /* Method for Lucene */
+ 	cout << *i << ": [" << i.get_weight() << "]\n" << data << "\n";
+     }
+     cout << flush;
+diff --git a/xapian-core/include/xapian/database.h b/xapian-core/include/xapian/database.h
+index 243bf6d..2bb9f2d 100644
+--- a/xapian-core/include/xapian/database.h
++++ b/xapian-core/include/xapian/database.h
+@@ -28,6 +28,7 @@
+ #include <iosfwd>
+ #include <string>
+ #include <vector>
++#include <set>
+ 
+ #include <xapian/attributes.h>
+ #include <xapian/intrusive_ptr.h>
+@@ -508,6 +509,8 @@ class XAPIAN_VISIBILITY_DEFAULT Database {
+ 	 *  @param opts	Options to use for check
+ 	 */
+ 	static size_t check(const std::string & path, int opts);
++
++    void get_fieldinfo(std::set<std::string> & field_set) const;
+ };
+ 
+ /** This class provides read/write access to a database.
+@@ -1007,7 +1010,6 @@ const int DBCHECK_SHOW_STATS = 8;
+  *  For use with Xapian::Database::check().
+  */
+ const int DBCHECK_FIX = 16;
+-
+ }
+ 
+ #endif /* XAPIAN_INCLUDED_DATABASE_H */
+diff --git a/xapian-core/include/xapian/document.h b/xapian-core/include/xapian/document.h
+index a58acdc..3bca417 100644
+--- a/xapian-core/include/xapian/document.h
++++ b/xapian-core/include/xapian/document.h
+@@ -265,6 +265,23 @@ class XAPIAN_VISIBILITY_DEFAULT Document {
+ 
+ 	/// Return a string describing this object.
+ 	std::string get_description() const;
++
++    /**
++     * Below is just for lucene
++     * Lucene stores multitype data in document, so in c++, data type
++     * must be specific when get_data
++     * Until now, five data types are supported in Lucene, string/int/
++     * long/float/double
++     */
++    std::string get_data_string(const std::string & filed);
++
++    int get_data_int(const std::string & field);
++
++    long get_data_long(const std::string & field);
++
++    float get_data_float(const std::string & field);
++
++    double get_data_double(const std::string & field);
+ };
+ 
+ }
+diff --git a/xapian-core/include/xapian/queryparser.h b/xapian-core/include/xapian/queryparser.h
+index 84b5c43..ad20f47 100644
+--- a/xapian-core/include/xapian/queryparser.h
++++ b/xapian-core/include/xapian/queryparser.h
+@@ -32,6 +32,8 @@
+ #include <set>
+ #include <string>
+ 
++#include <iostream>
++
+ namespace Xapian {
+ 
+ class Database;
+@@ -381,6 +383,26 @@ struct XAPIAN_VISIBILITY_DEFAULT FieldProcessor {
+     virtual Xapian::Query operator()(const std::string &str) = 0;
+ };
+ 
++/**
++ * Some Interface in Database::Internal has only one parameter for query string
++ * Like get_termfreq(const string & query). But Lucene must have additional 
++ * infomation about prefix. So this class is used to add field name to query string
++ * For example, data:query(data indicates field name, query indicates query string)
++ * When doing get_termfreq etc., data:query will be parsed
++ */
++class XAPIAN_VISIBILITY_DEFAULT LuceneFieldProcessor : public FieldProcessor {
++    std::string prefix;
++  public:
++    LuceneFieldProcessor(const std::string & prefix_)
++        : prefix(prefix_)
++    {
++        std::cout << "LuceneFieldProcessor::LuceneFieldProcessor called" << 
++            ", prefix=" << prefix << std::endl;
++    }
++
++    Xapian::Query operator()(const std::string &str);
++};
++
+ /// Build a Xapian::Query object from a user query string.
+ class XAPIAN_VISIBILITY_DEFAULT QueryParser {
+   public:
+@@ -736,6 +758,11 @@ class XAPIAN_VISIBILITY_DEFAULT QueryParser {
+ 
+     /// Return a string describing this object.
+     std::string get_description() const XAPIAN_PURE_FUNCTION;
++    /**
++     * For Lucene, generate LuceneFieldProcessor which used to convert term prefix
++     * to field number in LuceneFieldProcessor
++     **/
++    void set_fieldproc();
+ };
+ 
+ /** Convert a floating point number to a string, preserving sort order.
+diff --git a/xapian-core/matcher/branchpostlist.h b/xapian-core/matcher/branchpostlist.h
+index cb549e2..1ada4d0 100644
+--- a/xapian-core/matcher/branchpostlist.h
++++ b/xapian-core/matcher/branchpostlist.h
+@@ -27,6 +27,9 @@
+ #include "multimatch.h"
+ #include "api/postlist.h"
+ 
++#include <iostream>
++using namespace std;
++
+ /** Base class for postlists which are generated by merging two
+  *  sub-postlists.
+  *
+@@ -82,7 +85,9 @@ class BranchPostList : public PostList {
+ inline bool
+ next_handling_prune(PostList * & pl, double w_min, MultiMatch *matcher)
+ {
++    cout << "Branchpostlist.h->next_handling_prune next begin" << endl;
+     PostList *p = pl->next(w_min);
++    cout << "Branchpostlist.h->next_handling_prune next end" << endl;
+     if (!p) return false;
+     delete pl;
+     pl = p;
+diff --git a/xapian-core/matcher/localsubmatch.cc b/xapian-core/matcher/localsubmatch.cc
+index 9e654ec..a24235b 100644
+--- a/xapian-core/matcher/localsubmatch.cc
++++ b/xapian-core/matcher/localsubmatch.cc
+@@ -38,6 +38,8 @@
+ #include <map>
+ #include <string>
+ 
++#include <iostream>
++
+ using namespace std;
+ 
+ bool
+@@ -47,6 +49,7 @@ LocalSubMatch::prepare_match(bool nowait,
+     LOGCALL(MATCH, bool, "LocalSubMatch::prepare_match", nowait | total_stats);
+     (void)nowait;
+     Assert(db);
++    //JW, caculate weightinternal::stats
+     total_stats.accumulate_stats(*db, rset);
+     RETURN(true);
+ }
+@@ -93,6 +96,7 @@ LocalSubMatch::get_postlist_and_term_info(MultiMatch * matcher,
+ 	// There's a term-independent weight contribution, so we combine the
+ 	// postlist tree with an ExtraWeightPostList which adds in this
+ 	// contribution.
++    LOGLINE(MATCH, "LocalSubMatch::get_postlist_and_term_info maxwxtra != 0");
+ 	pl = new ExtraWeightPostList(pl, extra_wt.release(), matcher);
+     }
+ 
+@@ -136,6 +140,7 @@ LeafPostList *
+ LocalSubMatch::open_post_list(const string& term, double max_part)
+ {
+     LOGCALL(MATCH, LeafPostList *, "LocalSubMatch::open_post_list", term | max_part);
++    cout << "LocalSubMathc::open_post_list, terminfo:" << &term_info << endl;
+     if (term_info) {
+ 	Xapian::doccount tf = stats->get_termfreq(term);
+ 	using namespace Xapian;
+diff --git a/xapian-core/matcher/multiandpostlist.cc b/xapian-core/matcher/multiandpostlist.cc
+index 1e708f7..b36a567 100644
+--- a/xapian-core/matcher/multiandpostlist.cc
++++ b/xapian-core/matcher/multiandpostlist.cc
+@@ -172,12 +172,15 @@ MultiAndPostList::get_weight() const
+ bool
+ MultiAndPostList::at_end() const
+ {
++    LOGCALL(API, PostList *, "MultiAndPostList::at_end", did);
++
+     return (did == 0);
+ }
+ 
+ double
+ MultiAndPostList::recalc_maxweight()
+ {
++    LOGCALL(API, PostList *, "MultiAndPostList::recalc_maxweight", NO_ARGS);
+     max_total = 0.0;
+     for (size_t i = 0; i < n_kids; ++i) {
+ 	double new_max = plist[i]->recalc_maxweight();
+@@ -190,6 +193,7 @@ MultiAndPostList::recalc_maxweight()
+ PostList *
+ MultiAndPostList::find_next_match(double w_min)
+ {
++    LOGCALL(API, PostList *, "MultiAndPostList::find_next_match", n_kids);
+ advanced_plist0:
+     if (plist[0]->at_end()) {
+ 	did = 0;
+@@ -198,17 +202,25 @@ advanced_plist0:
+     did = plist[0]->get_docid();
+     for (size_t i = 1; i < n_kids; ++i) {
+ 	bool valid;
++    //In ChertDatabase, it calls skip_to() to move pointer to did in plist[i]
++    //Maybe check_helper is used to make sure another term's postlist 
++    //contains the same did in plist[0], make sure OP 'AND' right 
+ 	check_helper(i, did, w_min, valid);
++    LOGLINE(API, "MultiAndPostList::find_next_match valid=" << valid);
+ 	if (!valid) {
+ 	    next_helper(0, w_min);
+ 	    goto advanced_plist0;
+ 	}
+ 	if (plist[i]->at_end()) {
++        //did = 0 is available in Lucene
+ 	    did = 0;
+ 	    return NULL;
+ 	}
+ 	Xapian::docid new_did = plist[i]->get_docid();
++    //If new_did != did, at this time, new_did > did, so skip to new_did
+ 	if (new_did != did) {
++        LOGLINE(API, "MultiAndPostList::find_next_match, new_did=" << new_did <<
++                    ", did=" << did);
+ 	    skip_to_helper(0, new_did, w_min);
+ 	    goto advanced_plist0;
+ 	}
+@@ -219,6 +231,7 @@ advanced_plist0:
+ PostList *
+ MultiAndPostList::next(double w_min)
+ {
++    LOGCALL(API, PostList *, "MultiAndPostList::next", NO_ARGS);
+     next_helper(0, w_min);
+     return find_next_match(w_min);
+ }
+@@ -226,6 +239,7 @@ MultiAndPostList::next(double w_min)
+ PostList *
+ MultiAndPostList::skip_to(Xapian::docid did_min, double w_min)
+ {
++    LOGCALL(API, PostList *, "MultiAndPostList::skip_to", NO_ARGS);
+     skip_to_helper(0, did_min, w_min);
+     return find_next_match(w_min);
+ }
+@@ -233,6 +247,8 @@ MultiAndPostList::skip_to(Xapian::docid did_min, double w_min)
+ std::string
+ MultiAndPostList::get_description() const
+ {
++    LOGCALL(API, std::string, "MultiAndPostList::get_description()",
++                (unsigned)this);
+     string desc("(");
+     desc += plist[0]->get_description();
+     for (size_t i = 1; i < n_kids; ++i) {
+diff --git a/xapian-core/matcher/multiandpostlist.h b/xapian-core/matcher/multiandpostlist.h
+index 8913a1a..f3f15cd 100644
+--- a/xapian-core/matcher/multiandpostlist.h
++++ b/xapian-core/matcher/multiandpostlist.h
+@@ -92,6 +92,7 @@ class MultiAndPostList : public PostList {
+     /// Call check on a sub-postlist n, and handle any pruning.
+     void check_helper(size_t n, Xapian::docid did_min, double w_min,
+ 		      bool &valid) {
++    //ChertPostList::check() always return NULL
+ 	PostList * res = plist[n]->check(did_min, new_min(w_min, n), valid);
+ 	if (res) {
+ 	    delete plist[n];
+diff --git a/xapian-core/matcher/multimatch.cc b/xapian-core/matcher/multimatch.cc
+index 31f5c31..f99016a 100644
+--- a/xapian-core/matcher/multimatch.cc
++++ b/xapian-core/matcher/multimatch.cc
+@@ -397,6 +397,8 @@ MultiMatch::get_mset(Xapian::doccount first, Xapian::doccount maxitems,
+     ++vsdoc._refs;
+     Xapian::Document doc(&vsdoc);
+ 
++    LOGLINE(MATCH, "postlist size=" << postlists.size());
++
+     // Get a single combined postlist
+     AutoPtr<PostList> pl;
+     if (postlists.size() == 1) {
+@@ -431,6 +433,7 @@ MultiMatch::get_mset(Xapian::doccount first, Xapian::doccount maxitems,
+     LOGLINE(MATCH, "pl = (" << pl->get_description() << ")");
+     recalculate_w_max = false;
+ 
++    LOGLINE(MATCH, "L434");
+     Xapian::doccount matches_upper_bound = pl->get_termfreq_max();
+     Xapian::doccount matches_lower_bound = 0;
+     Xapian::doccount matches_estimated   = pl->get_termfreq_est();
+@@ -442,6 +445,8 @@ MultiMatch::get_mset(Xapian::doccount first, Xapian::doccount maxitems,
+ 	matches_lower_bound = pl->get_termfreq_min();
+     }
+ 
++    LOGLINE(MATCH, "L446");
++
+     // Prepare the matchspy
+     Xapian::MatchSpy *matchspy = NULL;
+     MultipleMatchSpy multispy(matchspies);
+@@ -480,6 +485,8 @@ MultiMatch::get_mset(Xapian::doccount first, Xapian::doccount maxitems,
+ 	return;
+     }
+ 
++    LOGLINE(MATCH, "L486");
++
+     // Number of documents considered by a decider.
+     Xapian::doccount decider_considered = 0;
+     // Number of documents denied by the decider.
+@@ -537,8 +544,12 @@ MultiMatch::get_mset(Xapian::doccount first, Xapian::doccount maxitems,
+ 	    }
+ 	}
+ 
++    LOGLINE(MATCH, "L545");
++
+ 	PostList * pl_copy = pl.get();
++    LOGLINE(MATCH, pl_copy->get_description());
+ 	if (rare(next_handling_prune(pl_copy, min_weight, this))) {
++        LOGLINE(MATCH, "L551");
+ 	    (void)pl.release();
+ 	    pl.reset(pl_copy);
+ 	    LOGLINE(MATCH, "*** REPLACING ROOT");
+@@ -554,11 +565,15 @@ MultiMatch::get_mset(Xapian::doccount first, Xapian::doccount maxitems,
+ 	    }
+ 	}
+ 
++    LOGLINE(MATCH, "L566");
++
+ 	if (rare(pl->at_end())) {
+ 	    LOGLINE(MATCH, "Reached end of potential matches");
+ 	    break;
+ 	}
+ 
++    LOGLINE(MATCH, "L573");
++
+ 	// Only calculate the weight if we need it for mcmp, or there's a
+ 	// percentage or weight cutoff in effect.  Otherwise we calculate it
+ 	// below if we haven't already rejected this candidate.
+@@ -573,6 +588,8 @@ MultiMatch::get_mset(Xapian::doccount first, Xapian::doccount maxitems,
+ 	    calculated_weight = true;
+ 	}
+ 
++    LOGLINE(MATCH, "L585");
++
+ 	Xapian::docid did = pl->get_docid();
+ 	vsdoc.set_document(did);
+ 	LOGLINE(MATCH, "Candidate document id " << did << " wt " << wt);
+@@ -616,6 +633,8 @@ MultiMatch::get_mset(Xapian::doccount first, Xapian::doccount maxitems,
+ 	    }
+ 	}
+ 
++    LOGLINE(MATCH, "L626");
++
+ 	// Use the match spy and/or decision functors (if specified).
+ 	if (matchspy != NULL || mdecider != NULL) {
+ 	    const unsigned int multiplier = db.internal.size();
+diff --git a/xapian-core/queryparser/queryparser.cc b/xapian-core/queryparser/queryparser.cc
+index e934451..1d94c23 100644
+--- a/xapian-core/queryparser/queryparser.cc
++++ b/xapian-core/queryparser/queryparser.cc
+@@ -238,3 +238,10 @@ QueryParser::get_description() const
+     // FIXME : describe better!
+     return "Xapian::QueryParser()";
+ }
++
++//For Lucene
++void
++QueryParser::set_fieldproc()
++{
++    internal->set_fieldproc();
++}
+diff --git a/xapian-core/queryparser/queryparser_internal.h b/xapian-core/queryparser/queryparser_internal.h
+index 11da6fc..28c5c7c 100644
+--- a/xapian-core/queryparser/queryparser_internal.h
++++ b/xapian-core/queryparser/queryparser_internal.h
+@@ -103,6 +103,8 @@ class QueryParser::Internal : public Xapian::Internal::intrusive_base {
+ 	default_op(Query::OP_OR), errmsg(NULL), max_wildcard_expansion(0) { }
+ 
+     Query parse_query(const string & query_string, unsigned int flags, const string & default_prefix);
++
++    void set_fieldproc();
+ };
+ 
+ }
+diff --git a/xapian-core/weight/weight.cc b/xapian-core/weight/weight.cc
+index 23991fd..c13e70f 100644
+--- a/xapian-core/weight/weight.cc
++++ b/xapian-core/weight/weight.cc
+@@ -29,6 +29,8 @@
+ 
+ #include "xapian/error.h"
+ 
++#include <iostream>
++
+ using namespace std;
+ 
+ namespace Xapian {
+@@ -58,6 +60,14 @@ Weight::init_(const Internal & stats, Xapian::termcount query_length,
+ 	      const string & term, Xapian::termcount wqf, double factor)
+ {
+     LOGCALL_VOID(MATCH, "Weight::init_", stats | query_length | term | wqf | factor);
++    cout << "Weight::init_ stats_needed:" << stats_needed <<
++        " AL:" << (stats_needed & AVERAGE_LENGTH) <<
++        " DLMAX:" << (stats_needed & DOC_LENGTH_MAX) <<
++        " DLMIN:" << (stats_needed & DOC_LENGTH_MIN) <<
++        " WM:" << (stats_needed & WDF_MAX) <<
++        " TF:" << (stats_needed & TERMFREQ) << 
++        " RTF:" << (stats_needed & RELTERMFREQ) << endl;
++    stats.debug_weight();
+     collection_size_ = stats.collection_size;
+     rset_size_ = stats.rset_size;
+     if (stats_needed & AVERAGE_LENGTH)
+@@ -74,6 +84,15 @@ Weight::init_(const Internal & stats, Xapian::termcount query_length,
+ 	reltermfreq_ = stats.get_reltermfreq(term);
+     query_length_ = query_length;
+     wqf_ = wqf;
++
++    cout << "Weight::init_" <<
++        " average_length_:" << average_length_ <<
++        " doclength_upper_bound_:" << doclength_upper_bound_ <<
++        " doclength_lower_bound_:" << doclength_lower_bound_ <<
++        " wdf_upper_bound_:" << wdf_upper_bound_ <<
++        " termfreq_:" << termfreq_ <<
++        " reltermfreq_:" << reltermfreq_ << endl;
++    
+     init(factor);
+ }
+ 
+diff --git a/xapian-core/weight/weightinternal.cc b/xapian-core/weight/weightinternal.cc
+index 828d011..0f0a949 100644
+--- a/xapian-core/weight/weightinternal.cc
++++ b/xapian-core/weight/weightinternal.cc
+@@ -33,6 +33,8 @@
+ #include "autoptr.h"
+ #include <set>
+ 
++#include <iostream>
++
+ using namespace std;
+ 
+ string
+@@ -70,6 +72,9 @@ Weight::Internal::get_termfreq(const string & term) const
+ 
+     map<string, TermFreqs>::const_iterator tfreq = termfreqs.find(term);
+     Assert(tfreq != termfreqs.end());
++
++    cout << "Weight::Internal::get_termfreq, tfreq:" << tfreq->second.termfreq << endl;
++
+     return tfreq->second.termfreq;
+ }
+ 
+@@ -84,10 +89,14 @@ Weight::Internal::accumulate_stats(const Xapian::Database::Internal &subdb,
+     map<string, TermFreqs>::iterator t;
+     for (t = termfreqs.begin(); t != termfreqs.end(); ++t) {
+ 	const string & term = t->first;
++    cout << "Weight::Internal::accumulate_stats " <<
++        " term:" << term << endl;
+ 	t->second.termfreq += subdb.get_termfreq(term);
+     }
+ 
+     const set<Xapian::docid> & items(rset.internal->get_items());
++    cout << "Weight::Internal::accumulate_stats " <<
++        " items.size():" << items.size() << endl;
+     set<Xapian::docid>::const_iterator d;
+     for (d = items.begin(); d != items.end(); ++d) {
+ 	Xapian::docid did = *d;
+@@ -133,4 +142,13 @@ Weight::Internal::get_description() const
+     return desc;
+ }
+ 
++void
++Weight::Internal::debug_weight() const {
++    cout << "Weight::Internal::debug_weight " <<
++        " total_length:" << total_length <<
++        " collection_size:" << collection_size <<
++        " rset_size:" << rset_size << 
++        " termfreqs.size:" << termfreqs.size() << endl;
++}
++
+ }
+diff --git a/xapian-core/weight/weightinternal.h b/xapian-core/weight/weightinternal.h
+index acde076..9c03a92 100644
+--- a/xapian-core/weight/weightinternal.h
++++ b/xapian-core/weight/weightinternal.h
+@@ -59,6 +59,7 @@ class RSet;
+ class Weight::Internal {
+   public:
+     /** Total length of all documents in the collection. */
++    //TODO这个数据在lucene中是不存在的
+     totlen_t total_length;
+ 
+     /** Number of documents in the collection. */
+@@ -119,6 +120,9 @@ class Weight::Internal {
+ 
+     /// Return a std::string describing this object.
+     std::string get_description() const;
++
++    //for debug
++    void debug_weight() const;
+ };
+ 
+ }
